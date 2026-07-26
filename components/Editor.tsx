@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { SignOutButton } from '@clerk/nextjs';
 import Chat from './Chat';
 import PublishBar from './PublishBar';
 import { t } from '@/lib/strings';
@@ -15,10 +16,12 @@ export default function Editor({
   siteId,
   siteName,
   productionUrl,
+  showSitesLink = false,
 }: {
   siteId: string;
   siteName: string;
   productionUrl: string;
+  showSitesLink?: boolean;
 }) {
   const [status, setStatus] = useState<SiteStatus | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
@@ -59,12 +62,19 @@ export default function Editor({
     <div className="flex h-screen flex-col">
       <header className="flex items-center justify-between border-b border-stone-200 bg-white px-5 py-3">
         <div>
-          <a href="/sites" className="text-sm text-stone-400 hover:underline">
-            ← {t.yourSites}
-          </a>
+          {showSitesLink && (
+            <a href="/sites" className="text-sm text-stone-400 hover:underline">
+              ← {t.yourSites}
+            </a>
+          )}
           <h1 className="text-lg font-bold leading-tight">{siteName}</h1>
         </div>
-        <PublishBar siteId={siteId} status={status} onChanged={refreshStatus} />
+        <div className="flex items-center gap-5">
+          <PublishBar siteId={siteId} status={status} onChanged={refreshStatus} />
+          <SignOutButton redirectUrl="/sign-in">
+            <button className="text-sm text-stone-500 hover:underline">{t.logout}</button>
+          </SignOutButton>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">

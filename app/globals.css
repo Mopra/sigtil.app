@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --color-ink: #1c1917;
+  --color-paper: #faf9f7;
+  --color-accent: #2f6f4f;
+  --color-accent-soft: #e7f0ea;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}

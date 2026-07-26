@@ -1,0 +1,59 @@
+import { put } from '@vercel/blob';
+import sharp from 'sharp';
+import { getUser, siteForUser } from '@/lib/auth';
+import { writeFile } from '@/lib/github';
+
+export const maxDuration = 120;
+
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
+const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
+
+function slugify(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/\.[^.]+$/, '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'fil';
+}
+
+export async function POST(req: Request) {
+  const user = await getUser();
+  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const form = await req.formData();
+  const siteId = String(form.get('siteId') ?? '');
+  const file = form.get('file');
+  if (!(file instanceof File)) return Response.json({ error: 'No file' }, { status: 400 });
+
+  const site = await siteForUser(user, siteId);
+  if (!site) return Response.json({ error: 'Forbidden' }, { status: 403 });
+
+  const stamp = Date.now().toString(36);
+  const slug = slugify(file.name);
+
+  if (IMAGE_TYPES.includes(file.type)) {
+    // Images: optimize and commit into the repo so they deploy with the site.
+    const optimized = await sharp(Buffer.from(await file.arrayBuffer()))
+      .rotate() // respect EXIF orientation
+      .resize({ width: 2000, height: 2000, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .toBuffer();
+    const path = `public/uploads/${stamp}-${slug}.webp`;
+    await writeFile(site, path, optimized, `sigtil: upload ${slug}.webp`);
+    return Response.json({ kind: 'image', ref: `/uploads/${stamp}-${slug}.webp` });
+  }
+
+  if (VIDEO_TYPES.includes(file.type)) {
+    // Videos: too heavy for git — store in Blob and reference by URL.
+    const blob = await put(`sigtil/${site.id}/${stamp}-${slug}`, file, {
+      access: 'public',
+      contentType: file.type,
+    });
+    return Response.json({ kind: 'video', ref: blob.url });
+  }
+
+  return Response.json({ error: 'Unsupported file type' }, { status: 415 });
+}

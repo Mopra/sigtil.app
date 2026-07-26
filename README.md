@@ -25,27 +25,29 @@ editor prompt ──▶ /api/chat (AI agent with file tools)
 
 ## Stack
 
-Next.js (App Router) · Tailwind 4 · AI SDK v6 via Vercel AI Gateway · Drizzle + Postgres · GitHub REST API · Vercel REST API · Vercel Blob · sharp
+Next.js (App Router) · Tailwind 4 · AI SDK via OpenRouter · Drizzle + Postgres · GitHub REST API · Vercel REST API · Vercel Blob · sharp
 
 ## Setup
 
 1. `npm install`
 2. Create a Postgres database (e.g. Neon via the Vercel Marketplace) and set `DATABASE_URL` in `.env.local` (copy `.env.example`).
 3. Fill the rest of `.env.local`:
-   - `AUTH_SECRET` — any long random string
-   - `AI_GATEWAY_API_KEY` — from Vercel AI Gateway (one key, any model; switch models via `SIGTIL_MODEL`)
+   - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` — from https://dashboard.clerk.com (API keys)
+   - `SIGTIL_ADMIN_EMAIL` — while no users exist, the first Clerk sign-in with this email becomes admin
+   - `OPENROUTER_API_KEY` — from https://openrouter.ai/keys (one key, any model; switch models via `SIGTIL_MODEL`)
    - `VERCEL_TOKEN` — account token, used to read deployment status
    - `BLOB_READ_WRITE_TOKEN` — from a Vercel Blob store (only needed for video uploads)
-   - `SIGTIL_BOOTSTRAP_CODE` — a one-time code; the first login with it creates the admin account
 4. `npm run db:push` to create the tables.
-5. `npm run dev`, open `/login`, enter the bootstrap code → you land in `/admin`.
+5. `npm run dev`, open `/sign-in`, sign in with the admin email → you land in `/admin`.
+
+Auth is Clerk (identity) + invite-only authorization in the DB: admins invite users by email in `/admin`, and the first Clerk sign-in with that email links the account. A Clerk account that isn't invited sees a "no access" page.
 
 ## Connecting a site (per site)
 
 1. Create a **fine-grained GitHub PAT** scoped to that one repo, permission *Contents: read & write*.
 2. Find the **Vercel project ID** (project settings) and team ID if applicable.
 3. In `/admin` → *Connect a site*: name, repo, token, project ID, production URL, and **site notes** — tell the AI where content lives ("menu data is in `lib/menu.ts`; the site has Danish and English text side by side"). Good notes make edits fast and precise.
-4. Create the editor user with a personal login code and give them access to the site.
+4. Invite the editor by email and give them access to the site.
 5. On the site's repo: protect `main` and require the Vercel build check (recommended backstop).
 
 The work branch (`sigtil-edits`) is created automatically on first edit; Vercel deploys it as a branch preview automatically since the repo is already connected to Vercel.

@@ -5,8 +5,7 @@ import { addMember, createSite, createUser } from './actions';
 
 export default async function AdminPage() {
   const user = await getUser();
-  if (!user) redirect('/login');
-  if (user.role !== 'admin') redirect('/sites');
+  if (!user || user.role !== 'admin') redirect('/sites');
 
   const [allSites, allUsers, memberships] = await Promise.all([
     db.select().from(sites),
@@ -68,8 +67,8 @@ export default async function AdminPage() {
           <form action={createUser}>
             <label className={label}>Name</label>
             <input name="name" required className={input} placeholder="Onkel Jens" />
-            <label className={label}>Personal login code (share it with them)</label>
-            <input name="code" required className={input} placeholder="jens-2026-knud" />
+            <label className={label}>Email (they sign in with this via Clerk)</label>
+            <input name="email" required type="email" className={input} placeholder="jens@example.com" />
             <label className={label}>Role</label>
             <select name="role" className={input} defaultValue="editor">
               <option value="editor">Editor</option>
@@ -125,7 +124,10 @@ export default async function AdminPage() {
             {allUsers.map(u => (
               <div key={u.id} className="border-t border-stone-100 py-2">
                 <span className="font-medium">{u.name}</span>{' '}
-                <span className="text-stone-400">{u.role}</span>
+                <span className="text-stone-400">
+                  {u.email} · {u.role}
+                  {!u.clerkId && ' · har ikke logget ind endnu'}
+                </span>
               </div>
             ))}
           </div>

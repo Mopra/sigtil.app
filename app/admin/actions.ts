@@ -3,11 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db, siteMembers, sites, users } from '@/lib/db';
-import { getUser, hashCode } from '@/lib/auth';
+import { getUser } from '@/lib/auth';
 
 async function requireAdmin() {
   const user = await getUser();
-  if (!user || user.role !== 'admin') redirect('/login');
+  if (!user || user.role !== 'admin') redirect('/sign-in');
   return user;
 }
 
@@ -31,7 +31,7 @@ export async function createUser(formData: FormData) {
   const role = String(formData.get('role')) === 'admin' ? 'admin' : 'editor';
   await db.insert(users).values({
     name: String(formData.get('name')),
-    codeHash: hashCode(String(formData.get('code'))),
+    email: String(formData.get('email')).trim().toLowerCase(),
     role,
   });
   revalidatePath('/admin');

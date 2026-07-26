@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { ClerkProvider } from '@clerk/nextjs';
+import { daDK } from '@clerk/localizations';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -9,7 +11,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="da">
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <ClerkProvider localization={daDK}>{children}</ClerkProvider>
+      </body>
     </html>
   );
 }

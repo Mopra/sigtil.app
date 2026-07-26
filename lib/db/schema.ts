@@ -3,8 +3,10 @@ import { boolean, jsonb, pgTable, primaryKey, text, timestamp, uuid } from 'driz
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
-  // sha256 hex of the personal login code
-  codeHash: text('code_hash').notNull().unique(),
+  // Invited by email; matched against the Clerk account's primary email (lowercased)
+  email: text('email').notNull().unique(),
+  // Clerk user id, linked on their first sign-in
+  clerkId: text('clerk_id').unique(),
   role: text('role', { enum: ['admin', 'editor'] }).notNull().default('editor'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

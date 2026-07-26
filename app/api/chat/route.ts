@@ -6,11 +6,14 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from 'ai';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { getUser, siteForUser } from '@/lib/auth';
 import { createSiteTools } from '@/lib/agent/tools';
 import { systemPrompt } from '@/lib/agent/system';
 
 export const maxDuration = 300;
+
+const openrouter = createOpenRouter();
 
 export async function POST(req: Request) {
   const user = await getUser();
@@ -21,7 +24,7 @@ export async function POST(req: Request) {
   if (!site) return new Response('Forbidden', { status: 403 });
 
   const result = streamText({
-    model: process.env.SIGTIL_MODEL ?? 'anthropic/claude-sonnet-4.5',
+    model: openrouter(process.env.SIGTIL_MODEL ?? 'anthropic/claude-sonnet-4.5'),
     system: systemPrompt(site),
     messages: await convertToModelMessages(messages),
     tools: createSiteTools(site),

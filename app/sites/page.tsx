@@ -1,17 +1,29 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { destroySession, getUser, sitesForUser } from '@/lib/auth';
+import { SignOutButton } from '@clerk/nextjs';
+import { getUser, sitesForUser } from '@/lib/auth';
 import { t } from '@/lib/strings';
-
-async function logout() {
-  'use server';
-  await destroySession();
-  redirect('/login');
-}
 
 export default async function SitesPage() {
   const user = await getUser();
-  if (!user) redirect('/login');
+
+  // Signed in with Clerk but not invited to sigtil.
+  if (!user) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-6">
+        <div className="w-full max-w-sm text-center">
+          <h1 className="text-2xl font-bold">{t.noAccessTitle}</h1>
+          <p className="mt-2 text-stone-500">{t.noAccessBody}</p>
+          <SignOutButton redirectUrl="/sign-in">
+            <button className="mt-6 rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:border-accent">
+              {t.logout}
+            </button>
+          </SignOutButton>
+        </div>
+      </main>
+    );
+  }
+
   const sites = await sitesForUser(user);
 
   // Editors with exactly one site go straight to it.
@@ -27,9 +39,9 @@ export default async function SitesPage() {
               Admin
             </Link>
           )}
-          <form action={logout}>
+          <SignOutButton redirectUrl="/sign-in">
             <button className="text-sm text-stone-500 hover:underline">{t.logout}</button>
-          </form>
+          </SignOutButton>
         </div>
       </div>
       <ul className="mt-6 space-y-3">

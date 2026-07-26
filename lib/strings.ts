@@ -7,11 +7,9 @@ export const t = {
   tagline: 'Din hjemmeside. Sig til, så ændrer vi den.',
 
   // Login
-  loginTitle: 'Log ind',
-  loginHint: 'Indtast din personlige kode',
-  loginButton: 'Log ind',
-  loginError: 'Koden blev ikke genkendt. Prøv igen.',
   logout: 'Log ud',
+  noAccessTitle: 'Ingen adgang endnu',
+  noAccessBody: 'Din konto er ikke inviteret til sigtil. Bed den der administrerer siden om at invitere din e-mail.',
 
   // Site picker
   yourSites: 'Dine hjemmesider',

@@ -50,13 +50,20 @@ export async function ensureWorkBranch(site: Site): Promise<string> {
   return base;
 }
 
-/** Recursive file listing of the working branch. */
-export async function listFiles(site: Site): Promise<string[]> {
+export type TreeEntry = { path: string; size: number };
+
+/** Recursive listing of the working branch, with blob sizes. One API call. */
+export async function listTree(site: Site): Promise<TreeEntry[]> {
   const sha = await ensureWorkBranch(site);
   const tree = await gh(site, `/git/trees/${sha}?recursive=1`);
-  return (tree.tree as Array<{ path: string; type: string }>)
+  return (tree.tree as Array<{ path: string; type: string; size?: number }>)
     .filter(t => t.type === 'blob')
-    .map(t => t.path);
+    .map(t => ({ path: t.path, size: t.size ?? 0 }));
+}
+
+/** Recursive file listing of the working branch. */
+export async function listFiles(site: Site): Promise<string[]> {
+  return (await listTree(site)).map(t => t.path);
 }
 
 export async function readFile(site: Site, path: string): Promise<{ content: string; sha: string }> {

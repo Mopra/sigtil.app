@@ -1,7 +1,7 @@
 import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
 import type { Site } from '@/lib/db';
-import { listFiles, readFile, writeFile } from '@/lib/github';
+import { listTree, readFile, writeFile } from '@/lib/github';
 
 const ALWAYS_BLOCKED = [
   'package.json',
@@ -27,28 +27,99 @@ export function isEditable(site: Site, path: string): boolean {
 
 const MAX_FILE_CHARS = 60_000;
 
+/** Extensions worth grepping — everything else is a binary or a build artefact. */
+const SEARCHABLE = /\.(tsx?|jsx?|mdx?|json|ya?ml|css|scss|html|txt|svg)$/i;
+/** Skip blobs this large when searching; they are never hand-written content. */
+const MAX_SEARCHABLE_BYTES = 200_000;
+const MAX_SEARCHED_FILES = 80;
+const MAX_MATCHES = 50;
+
+/** Files the agent is allowed to touch — the only ones worth listing or searching. */
+function editableTree(site: Site, tree: Array<{ path: string; size: number }>) {
+  return tree.filter(t => isEditable(site, t.path));
+}
+
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (let i = 0; i < items.length; i += limit) {
+    out.push(...(await Promise.all(items.slice(i, i + limit).map(fn))));
+  }
+  return out;
+}
+
 export function createSiteTools(site: Site) {
   return {
     listFiles: tool({
       description:
-        'List all files in the website project. Use this first to find where content lives. Optionally filter by a path prefix.',
+        'List the editable content files in the website project. Use this to find where content lives. Optionally filter by a path prefix.',
       inputSchema: z.object({
         prefix: z.string().optional().describe('Only list files under this path prefix, e.g. "app/"'),
       }),
       execute: async ({ prefix }) => {
-        const files = await listFiles(site);
+        const files = editableTree(site, await listTree(site)).map(t => t.path);
         const filtered = prefix ? files.filter(f => f.startsWith(prefix)) : files;
         return filtered.slice(0, 500).join('\n') || '(no files)';
       },
     }),
 
+    searchFiles: tool({
+      description:
+        'Search the text of all editable files for a string, and get back the matching lines with their file paths and line numbers. Prefer this over reading whole files when you are looking for specific wording (e.g. opening hours, a dish name, a headline) — it is much faster and finds every language version of a text at once.',
+      inputSchema: z.object({
+        query: z.string().describe('Text to search for, e.g. "Åbningstider" or "16:00"'),
+        caseSensitive: z.boolean().optional().describe('Defaults to false'),
+      }),
+      execute: async ({ query, caseSensitive }) => {
+        if (!query.trim()) return 'Provide a non-empty search string.';
+        const candidates = editableTree(site, await listTree(site))
+          .filter(t => SEARCHABLE.test(t.path) && t.size <= MAX_SEARCHABLE_BYTES)
+          .slice(0, MAX_SEARCHED_FILES);
+
+        const needle = caseSensitive ? query : query.toLowerCase();
+        const results = await mapLimit(candidates, 8, async ({ path }) => {
+          let content: string;
+          try {
+            ({ content } = await readFile(site, path));
+          } catch {
+            return []; // unreadable blob — skip rather than fail the whole search
+          }
+          return content
+            .split('\n')
+            .map((line, i) => ({ path, line: i + 1, text: line }))
+            .filter(m => (caseSensitive ? m.text : m.text.toLowerCase()).includes(needle));
+        });
+
+        const matches = results.flat();
+        if (matches.length === 0) return `No matches for "${query}".`;
+        const shown = matches.slice(0, MAX_MATCHES);
+        const lines = shown.map(m => `${m.path}:${m.line}: ${m.text.trim().slice(0, 200)}`);
+        if (matches.length > shown.length) {
+          lines.push(`[${matches.length - shown.length} more matches — narrow the search]`);
+        }
+        return lines.join('\n');
+      },
+    }),
+
     readFile: tool({
-      description: 'Read the current content of a file in the website project.',
+      description:
+        'Read the current content of a file in the website project. Pass startLine/endLine to read just part of a large file — use the line numbers from searchFiles.',
       inputSchema: z.object({
         path: z.string().describe('File path, e.g. "lib/menu.ts"'),
+        startLine: z.number().int().min(1).optional().describe('First line to read (1-based, inclusive)'),
+        endLine: z.number().int().min(1).optional().describe('Last line to read (inclusive)'),
       }),
-      execute: async ({ path }) => {
+      execute: async ({ path, startLine, endLine }) => {
         const { content } = await readFile(site, path);
+
+        if (startLine != null || endLine != null) {
+          const all = content.split('\n');
+          const from = Math.max(1, startLine ?? 1);
+          const to = Math.min(all.length, endLine ?? all.length);
+          if (from > all.length) return `File has only ${all.length} lines.`;
+          const slice = all.slice(from - 1, to).join('\n');
+          return `[lines ${from}-${to} of ${all.length}]\n${slice}`;
+        }
+
         if (content.length > MAX_FILE_CHARS) {
           return content.slice(0, MAX_FILE_CHARS) + `\n\n[truncated — file is ${content.length} characters]`;
         }

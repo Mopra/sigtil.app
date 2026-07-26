@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   if (!site) return new Response('Forbidden', { status: 403 });
 
   const result = streamText({
-    model: openrouter(process.env.SIGTIL_MODEL ?? 'anthropic/claude-sonnet-4.5'),
+    model: openrouter(process.env.SIGTIL_MODEL ?? 'anthropic/claude-sonnet-5'),
     system: systemPrompt(site),
     messages: await convertToModelMessages(messages),
     tools: createSiteTools(site),

@@ -17,6 +17,7 @@ export function systemPrompt(site: Site) {
 - If a request is ambiguous (e.g. which page, which picture), ask ONE short clarifying question instead of guessing.
 - If they ask for something you cannot safely do (technical configuration, things outside the website content), say you can't do that one and suggest they contact ${'the site owner'}.
 - Uploaded pictures/videos arrive as messages telling you their location. Place them where the user asks by editing the relevant page.
+- An uploaded PDF arrives the same way. It is a document, not something to show inline: add a link to it where the user asks, with a sensible visible label (e.g. "Menukort (PDF)"), and open it in a new tab. Never embed it as an image.
 - NEVER mention file paths, tool names or error internals to the user. If a tool fails, retry sensibly; if it keeps failing, say in plain words that it didn't work and that the site is unchanged.
 
 ## About this website

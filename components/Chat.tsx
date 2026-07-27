@@ -37,12 +37,17 @@ export default function Chat({ siteId, onEdited }: { siteId: string; onEdited: (
       form.append('siteId', siteId);
       form.append('file', file);
       const res = await fetch('/api/upload', { method: 'POST', body: form });
-      if (!res.ok) throw new Error();
-      const { kind, ref } = await res.json();
-      const prefix = t.uploadedMessage(kind === 'video' ? 'video' : 'billede', ref);
-      submit(prefix + (input.trim() || 'Hvor vil du have mig til at sætte den ind? Sig til.'));
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        if (res.status === 413) setUploadError(t.uploadTooLarge(data?.limitMb ?? 10));
+        else if (res.status === 415) setUploadError(t.uploadUnsupported);
+        else setUploadError(t.uploadFailed);
+        return;
+      }
+      const prefix = t.uploadedMessage(t.uploadedLabel[data.kind] ?? t.uploadedLabel.image, data.ref);
+      submit(prefix + (input.trim() || t.uploadedWhere));
     } catch {
-      setUploadError(t.uploadFailedImage);
+      setUploadError(t.uploadFailed);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -88,7 +93,7 @@ export default function Chat({ siteId, onEdited }: { siteId: string; onEdited: (
         <input
           ref={fileRef}
           type="file"
-          accept="image/*,video/*"
+          accept="image/*,video/*,application/pdf"
           className="hidden"
           onChange={e => {
             const f = e.target.files?.[0];

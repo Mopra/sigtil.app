@@ -19,11 +19,15 @@ export const t = {
   chatPlaceholder: 'Skriv hvad der skal ændres…',
   chatEmpty: 'Fortæl mig hvad der skal ændres på siden — fx “Skift åbningstiderne til 12–22” eller “Sæt det nye billede ind øverst på forsiden”.',
   thinking: 'Arbejder på det…',
-  attach: 'Vedhæft billede eller video',
+  attach: 'Vedhæft billede, video eller PDF',
   uploading: 'Sender fil…',
-  uploadFailedImage: 'Billedet kunne ikke sendes. Prøv igen.',
-  uploadedMessage: (kind: 'billede' | 'video', ref: string) =>
-    `Jeg har uploadet et ${kind} (${ref}). `,
+  uploadFailed: 'Filen kunne ikke sendes. Prøv igen.',
+  uploadTooLarge: (limitMb: number) => `Filen er for stor. Den må højst fylde ${limitMb} MB.`,
+  uploadUnsupported: 'Den filtype kan ikke bruges. Send et billede, en video eller en PDF.',
+  // Full noun phrase incl. article — Danish genders differ ("et billede", "en video").
+  uploadedLabel: { image: 'et billede', video: 'en video', pdf: 'en PDF' } as Record<string, string>,
+  uploadedMessage: (label: string, ref: string) => `Jeg har uploadet ${label} (${ref}). `,
+  uploadedWhere: 'Hvor vil du have den ind på siden? Sig til.',
 
   // Preview
   previewTitle: 'Sådan kommer siden til at se ud',

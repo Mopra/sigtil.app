@@ -24,6 +24,10 @@ export default function Editor({
   showSitesLink?: boolean;
 }) {
   const [status, setStatus] = useState<SiteStatus | null>(null);
+  // Sticky: only ever advances to a newer build that is live. Swapping it for a
+  // building deployment — or clearing it when a status poll fails — would drop
+  // the iframe onto a page that cannot be framed, blanking the preview.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
   const lastReadyUrl = useRef<string | null>(null);
 
@@ -34,12 +38,11 @@ export default function Editor({
       const next: SiteStatus = await res.json();
       setStatus(next);
       // Reload the preview iframe when a fresh build becomes ready.
-      if (next.preview?.state === 'READY' && next.preview.upToDate) {
-        const url = next.preview.url;
-        if (url && url !== lastReadyUrl.current) {
-          lastReadyUrl.current = url;
-          setIframeKey(k => k + 1);
-        }
+      const url = next.preview?.url ?? null;
+      if (url && url !== lastReadyUrl.current) {
+        lastReadyUrl.current = url;
+        setPreviewUrl(url);
+        setIframeKey(k => k + 1);
       }
     } catch {
       // transient — next poll will recover
@@ -52,7 +55,6 @@ export default function Editor({
     return () => clearInterval(id);
   }, [refreshStatus]);
 
-  const previewUrl = status?.preview?.url ?? null;
   const previewBuilding =
     (status?.preview && !status.preview.upToDate) ||
     status?.preview?.state === 'BUILDING' ||

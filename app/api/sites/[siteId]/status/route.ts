@@ -19,7 +19,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
     preview: preview
       ? {
           state: preview.state,
-          url: preview.url,
+          // Never hand the client a URL that is still building — it cannot be framed.
+          url: preview.readyUrl,
           // Preview is only current when it was built from the branch tip
           upToDate: pending.length === 0 || preview.commitSha === pending[pending.length - 1]?.sha,
         }

@@ -72,13 +72,18 @@ export async function latestProductionDeployment(site: Site): Promise<Deployment
 }
 
 /**
- * Wait until a production deployment for the given commit sha is READY.
- * Resolves true when live, false on timeout or build error.
+ * Wait until a production deployment for the given commit sha is READY, or a
+ * later one that `includes` it. Resolves true when live, false on timeout or
+ * build error.
  */
 export async function waitForProduction(
   site: Site,
   commitSha: string,
-  { timeoutMs = 240_000, intervalMs = 5_000 } = {},
+  {
+    timeoutMs = 240_000,
+    intervalMs = 5_000,
+    includes = async (_sha: string) => false,
+  }: { timeoutMs?: number; intervalMs?: number; includes?: (sha: string) => Promise<boolean> } = {},
 ): Promise<{ live: boolean; error?: string }> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -86,8 +91,10 @@ export async function waitForProduction(
     if (prod.commitSha === commitSha) {
       if (prod.state === 'READY') return { live: true };
       if (prod.state === 'ERROR' || prod.state === 'CANCELED') {
-        return { live: false, error: 'The update could not be built. Nothing was broken — the previous version is still live.' };
+        return { live: false, error: 'The update could not be built. Nothing was broken. The previous version is still live.' };
       }
+    } else if (prod.state === 'READY' && prod.commitSha && (await includes(prod.commitSha))) {
+      return { live: true };
     }
     await new Promise(r => setTimeout(r, intervalMs));
   }

@@ -1,4 +1,4 @@
-import { getUser, siteForUser } from '@/lib/auth';
+import { getUser, workspaceForUser } from '@/lib/auth';
 import { syncWorkBranch } from '@/lib/github';
 import { latestDeploymentForBranch } from '@/lib/vercel';
 
@@ -6,13 +6,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
   const user = await getUser();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   const { siteId } = await params;
-  const site = await siteForUser(user, siteId);
+  const site = await workspaceForUser(user, siteId);
   if (!site) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
   // Sync first: the preview must never show an older version than the live site.
-  const sync = await syncWorkBranch(site).catch(() => null);
+  // Without waiting: if a chat edit or another tab is syncing, report as is.
+  const sync = await syncWorkBranch(site, { wait: false }).catch(() => null);
   if (!sync) return Response.json({ error: 'Unavailable' }, { status: 503 });
-  const { pending, conflict } = sync;
+  const { pending } = sync;
   const pendingShas = new Set(pending.map(c => c.sha));
   const productionUrl = site.productionUrl.replace(/\/+$/, '');
 
@@ -25,7 +26,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
 
   return Response.json({
     pendingChanges: pending.length,
-    conflict,
     preview: {
       state: preview?.state ?? 'READY',
       // Nothing unpublished: the live site IS the latest version, so show it.

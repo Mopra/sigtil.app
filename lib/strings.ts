@@ -33,8 +33,6 @@ export const t = {
   ],
   thinking: 'Arbejder på det',
   chatFailed: 'Det lykkedes ikke, og siden er uændret. Prøv igen.',
-  conflict:
-    'Siden er blevet ændret et andet sted, og det støder sammen med dine ændringer, der ikke er udgivet endnu. Fortryd alle ændringer for at fortsætte fra den nyeste version.',
   send: 'Send',
   attach: 'Vedhæft billede, video eller PDF',
   dropHere: 'Slip filen her',

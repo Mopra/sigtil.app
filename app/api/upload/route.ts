@@ -1,6 +1,6 @@
 import { put } from '@vercel/blob';
 import sharp from 'sharp';
-import { getUser, siteForUser } from '@/lib/auth';
+import { getUser, workspaceForUser } from '@/lib/auth';
 import { writeFile } from '@/lib/github';
 
 export const maxDuration = 120;
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   const file = form.get('file');
   if (!(file instanceof File)) return Response.json({ error: 'No file' }, { status: 400 });
 
-  const site = await siteForUser(user, siteId);
+  const site = await workspaceForUser(user, siteId);
   if (!site) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
   const stamp = Date.now().toString(36);

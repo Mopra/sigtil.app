@@ -19,7 +19,6 @@ export default function PublishBar({
   const [confirmAll, setConfirmAll] = useState(false);
 
   const pending = status?.pendingChanges ?? 0;
-  const conflict = status?.conflict ?? false;
 
   // Toasts fade on their own; failures stay a little longer so they can be read.
   useEffect(() => {
@@ -84,7 +83,7 @@ export default function PublishBar({
         </span>
       )}
 
-      {(pending > 0 || conflict) && !publishing && (
+      {pending > 0 && !publishing && (
         <Menu
           label={t.undoMenu}
           trigger={<Icon name="undo" size={18} />}

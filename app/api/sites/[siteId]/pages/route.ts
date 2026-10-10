@@ -1,4 +1,4 @@
-import { getUser, siteForUser } from '@/lib/auth';
+import { getUser, workspaceForUser } from '@/lib/auth';
 import { listFiles } from '@/lib/github';
 import { pagesFromFiles } from '@/lib/pages';
 
@@ -7,7 +7,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
   const user = await getUser();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   const { siteId } = await params;
-  const site = await siteForUser(user, siteId);
+  const site = await workspaceForUser(user, siteId);
   if (!site) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
   const pages = pagesFromFiles(await listFiles(site))

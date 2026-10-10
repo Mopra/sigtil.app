@@ -1,7 +1,16 @@
 import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
 import type { Site } from '@/lib/db';
-import { commitTreeChanges, listTree, readBlob, readFile, writeFile, type TreeEntry } from '@/lib/github';
+import {
+  commitTreeChanges,
+  listTree,
+  readBlob,
+  readFile,
+  updateFile,
+  writeFile,
+  type TreeChange,
+  type TreeEntry,
+} from '@/lib/github';
 import { pagesFromFiles } from '@/lib/pages';
 
 const ALWAYS_BLOCKED = [
@@ -174,12 +183,16 @@ export function createSiteTools(site: Site) {
         if (!isEditable(site, path)) {
           return `Refused: ${path} is not an editable file on this site. Only content files may be changed.`;
         }
-        const { content } = await readFile(site, path);
-        const occurrences = content.split(oldText).length - 1;
+        // Checked against the file as it is at the moment of writing, so an
+        // edit that landed since the AI read it is kept, never overwritten.
+        let occurrences = 0;
+        const saved = await updateFile(site, path, content => {
+          occurrences = content.split(oldText).length - 1;
+          return occurrences === 1 ? content.replace(oldText, () => newText) : null;
+        }, `sigtil: ${summary}`);
+        if (saved) return `Saved. ${path} updated.`;
         if (occurrences === 0) return 'The text to replace was not found. Read the file again and retry with the exact current text.';
-        if (occurrences > 1) return `The text to replace appears ${occurrences} times. Include more surrounding context to make it unique.`;
-        await writeFile(site, path, content.replace(oldText, newText), `sigtil: ${summary}`);
-        return `Saved. ${path} updated.`;
+        return `The text to replace appears ${occurrences} times. Include more surrounding context to make it unique.`;
       },
     }),
 
@@ -210,26 +223,29 @@ export function createSiteTools(site: Site) {
         summary: z.string().describe('Very short description in Danish, e.g. "Omdøbte siden Om os til Kontakt"'),
       }),
       execute: async ({ moves, summary }) => {
-        const tree = await listTree(site);
-        const existing = new Set(tree.map(t => t.path));
-        const changes = [];
-        for (const { from, to } of moves) {
-          const src = normalize(from);
-          const dest = normalize(to);
-          const files = filesAt(tree, src);
-          if (files.length === 0) return `Nothing found at ${from}.`;
-          for (const f of files) {
-            const target = dest + f.path.slice(src.length);
-            if (!isEditable(site, f.path) || !isEditable(site, target)) {
-              return `Refused: moving ${f.path} to ${target} is outside the editable content of this site.`;
+        let moved = 0;
+        const refused = await commitTreeChanges(site, tree => {
+          const existing = new Set(tree.map(t => t.path));
+          const changes: TreeChange[] = [];
+          for (const { from, to } of moves) {
+            const src = normalize(from);
+            const dest = normalize(to);
+            const files = filesAt(tree, src);
+            if (files.length === 0) return `Nothing found at ${from}.`;
+            for (const f of files) {
+              const target = dest + f.path.slice(src.length);
+              if (!isEditable(site, f.path) || !isEditable(site, target)) {
+                return `Refused: moving ${f.path} to ${target} is outside the editable content of this site.`;
+              }
+              if (existing.has(target)) return `Refused: ${target} already exists.`;
+              if (isFrontPage(f.path)) return 'Refused: the front page cannot be moved.';
+              changes.push({ path: target, mode: f.mode, sha: f.sha }, { path: f.path, mode: f.mode, sha: null });
             }
-            if (existing.has(target)) return `Refused: ${target} already exists.`;
-            if (isFrontPage(f.path)) return 'Refused: the front page cannot be moved.';
-            changes.push({ path: target, mode: f.mode, sha: f.sha }, { path: f.path, mode: f.mode, sha: null });
           }
-        }
-        await commitTreeChanges(site, changes, `sigtil: ${summary}`);
-        return `Moved ${changes.length / 2} file(s). Now update links to the old location.`;
+          moved = changes.length / 2;
+          return changes;
+        }, `sigtil: ${summary}`);
+        return refused ?? `Moved ${moved} file(s). Now update links to the old location.`;
       },
     }),
 
@@ -241,15 +257,18 @@ export function createSiteTools(site: Site) {
         summary: z.string().describe('Very short description in Danish, e.g. "Fjernede siden Nyheder"'),
       }),
       execute: async ({ paths, summary }) => {
-        const tree = await listTree(site);
-        const files = [...new Set(paths.flatMap(p => filesAt(tree, p)))];
-        if (files.length === 0) return `Nothing found at ${paths.join(', ')}.`;
-        for (const f of files) {
-          if (!isEditable(site, f.path)) return `Refused: ${f.path} is not an editable file on this site.`;
-          if (isFrontPage(f.path)) return 'Refused: the front page cannot be deleted.';
-        }
-        await commitTreeChanges(site, files.map(f => ({ path: f.path, mode: f.mode, sha: null })), `sigtil: ${summary}`);
-        return `Deleted ${files.length} file(s).`;
+        let deleted = 0;
+        const refused = await commitTreeChanges(site, tree => {
+          const files = [...new Set(paths.flatMap(p => filesAt(tree, p)))];
+          if (files.length === 0) return `Nothing found at ${paths.join(', ')}.`;
+          for (const f of files) {
+            if (!isEditable(site, f.path)) return `Refused: ${f.path} is not an editable file on this site.`;
+            if (isFrontPage(f.path)) return 'Refused: the front page cannot be deleted.';
+          }
+          deleted = files.length;
+          return files.map(f => ({ path: f.path, mode: f.mode, sha: null }));
+        }, `sigtil: ${summary}`);
+        return refused ?? `Deleted ${deleted} file(s).`;
       },
     }),
   } satisfies ToolSet;

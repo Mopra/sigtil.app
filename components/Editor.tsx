@@ -12,7 +12,6 @@ import { t } from '@/lib/strings';
 
 export type SiteStatus = {
   pendingChanges: number;
-  conflict: boolean;
   preview: { state: string; url: string | null; upToDate: boolean } | null;
   productionUrl: string;
 };
@@ -100,13 +99,12 @@ export default function Editor({
     refreshPages();
   }, [refreshStatus, refreshPages]);
 
-  const locked = status?.conflict ?? false;
   const inline = useInlineEdit({
     siteId,
     frameRef,
     frameKey: iframeKey,
     origin: previewUrl ? new URL(previewUrl).origin : null,
-    on: editText && !locked,
+    on: editText,
     onSaved: onEdited,
     onHandOff: (from, to) => {
       setPrefill({ text: t.inlineEditHandOff(from, to), send: true, id: Date.now() });
@@ -198,7 +196,7 @@ export default function Editor({
         <section
           className={`${view === 'chat' ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col overflow-hidden rounded-panel bg-surface shadow-float md:flex md:w-[400px] md:flex-none`}
         >
-          <Chat siteId={siteId} page={page} prefill={prefill} locked={status?.conflict ?? false} onEdited={onEdited} />
+          <Chat siteId={siteId} page={page} prefill={prefill} onEdited={onEdited} />
         </section>
 
         <section
@@ -265,7 +263,6 @@ export default function Editor({
                 <button
                   type="button"
                   onClick={() => setEditText(on => !on)}
-                  disabled={locked}
                   title={t.inlineEditTitle}
                   aria-pressed={editText}
                   className={`flex h-8 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition disabled:opacity-40 ${
@@ -297,7 +294,7 @@ export default function Editor({
               )}
             </div>
           </div>
-          {previewUrl && inline.ready && editText && !locked && (
+          {previewUrl && inline.ready && editText && (
             <div
               role="status"
               className={`flex shrink-0 items-center justify-center gap-2 px-4 py-2 text-[13px] font-medium ${

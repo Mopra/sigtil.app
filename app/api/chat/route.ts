@@ -7,7 +7,7 @@ import {
   type UIMessage,
 } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { getUser, siteForUser } from '@/lib/auth';
+import { getUser, workspaceForUser } from '@/lib/auth';
 import { createSiteTools } from '@/lib/agent/tools';
 import { syncWorkBranch } from '@/lib/github';
 import { systemPrompt } from '@/lib/agent/system';
@@ -44,12 +44,11 @@ export async function POST(req: Request) {
   if (!user) return new Response('Unauthorized', { status: 401 });
 
   const { messages, siteId }: { messages: UIMessage[]; siteId: string } = await req.json();
-  const site = await siteForUser(user, siteId);
+  const site = await workspaceForUser(user, siteId);
   if (!site) return new Response('Forbidden', { status: 403 });
 
   // Every edit must start from the latest version of the site, never an older one.
-  const { conflict } = await syncWorkBranch(site);
-  if (conflict) return new Response('Conflict', { status: 409 });
+  await syncWorkBranch(site);
 
   const result = streamText({
     model,

@@ -1,6 +1,6 @@
 import type { Site } from './db';
 import { readTextFiles } from './agent/tools';
-import { readFile, writeFile } from './github';
+import { updateFile } from './github';
 
 export type TextEditResult =
   /** Changed straight in the one place the text lives. */
@@ -75,12 +75,17 @@ export async function replaceText(site: Site, oldText: string, newText: string):
   if (matches.length !== 1) return { status: 'unclear', matches: matches.length };
 
   const [m] = matches;
-  // Re-read the file at the branch tip so the write cannot undo a newer edit.
-  const { content } = await readFile(site, m.path);
-  if (content.slice(m.index, m.index + m.found.length) !== m.found) return { status: 'unclear', matches: 1 };
-  const next = content.slice(0, m.index) + m.replacement + content.slice(m.index + m.found.length);
-  await writeFile(site, m.path, next, `sigtil: Rettede teksten “${short(oldText)}” til “${short(newText)}”`);
-  return { status: 'saved' };
+  // Checked against the file as it is when writing, so the write cannot undo a newer edit.
+  const saved = await updateFile(
+    site,
+    m.path,
+    content =>
+      content.slice(m.index, m.index + m.found.length) === m.found
+        ? content.slice(0, m.index) + m.replacement + content.slice(m.index + m.found.length)
+        : null,
+    `sigtil: Rettede teksten “${short(oldText)}” til “${short(newText)}”`,
+  );
+  return saved ? { status: 'saved' } : { status: 'unclear', matches: 1 };
 }
 
 function short(s: string) {

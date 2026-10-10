@@ -16,7 +16,6 @@ export default function Chat({
   siteId,
   page,
   prefill,
-  locked = false,
   onEdited,
 }: {
   siteId: string;
@@ -24,8 +23,6 @@ export default function Chat({
   page: string;
   /** Text to drop into the input for the editor to finish, e.g. from the page buttons. */
   prefill: ChatPrefill | null;
-  /** The site changed elsewhere in a way that clashes with unpublished edits; no editing until resolved. */
-  locked?: boolean;
   onEdited: () => void;
 }) {
   const [input, setInput] = useState('');
@@ -73,7 +70,7 @@ export default function Chat({
 
   useEffect(() => {
     if (!prefill) return;
-    if (prefill.send && !busy && !locked) {
+    if (prefill.send && !busy) {
       submit(prefill.text);
       return;
     }
@@ -88,7 +85,7 @@ export default function Chat({
   }, [prefill]);
 
   function submit(text: string) {
-    if (!text.trim() || locked) return;
+    if (!text.trim()) return;
     sendMessage({ text, metadata: { page } });
     setInput('');
     setHint(null);
@@ -119,7 +116,7 @@ export default function Chat({
     }
   }
 
-  const canAttach = !busy && !uploading && !locked;
+  const canAttach = !busy && !uploading;
 
   return (
     <div
@@ -155,7 +152,6 @@ export default function Chat({
                 <button
                   key={s}
                   type="button"
-                  disabled={locked}
                   onClick={() => fill(s)}
                   className="rounded-full border border-line px-4 py-2 text-left text-[15px] text-ink transition hover:border-accent/40 hover:bg-accent-soft hover:text-accent disabled:opacity-40"
                 >
@@ -193,7 +189,6 @@ export default function Chat({
           </div>
         )}
         {error && !busy && <Notice tone="danger">{t.chatFailed}</Notice>}
-        {locked && <Notice tone="danger">{t.conflict}</Notice>}
         {uploading && (
           <div className="flex items-center gap-2 text-sm text-ink-faint">
             <Spinner className="text-accent" />
@@ -258,7 +253,6 @@ export default function Chat({
             rows={1}
             value={input}
             placeholder={t.chatPlaceholder}
-            disabled={locked}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -272,7 +266,7 @@ export default function Chat({
             type="submit"
             title={t.send}
             aria-label={t.send}
-            disabled={busy || locked || !input.trim()}
+            disabled={busy || !input.trim()}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-white transition hover:bg-accent-hover active:scale-90 disabled:bg-line disabled:text-ink-faint"
           >
             <Icon name="arrowUp" size={18} />

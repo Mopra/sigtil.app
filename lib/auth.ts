@@ -1,6 +1,7 @@
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { and, eq } from 'drizzle-orm';
 import { db, siteMembers, sites, users, type Site, type User } from './db';
+import type { Workspace } from './github';
 
 /**
  * Resolve the signed-in Clerk account to a sigtil user.
@@ -67,4 +68,14 @@ export async function sitesForUser(user: User): Promise<Site[]> {
 export async function siteForUser(user: User, siteId: string): Promise<Site | null> {
   const all = await sitesForUser(user);
   return all.find(s => s.id === siteId) ?? null;
+}
+
+/**
+ * The site as this user edits it: on a work branch of their own, so editors
+ * never share, publish or undo each other's unpublished changes.
+ */
+export async function workspaceForUser(user: User, siteId: string): Promise<Workspace | null> {
+  const site = await siteForUser(user, siteId);
+  if (!site) return null;
+  return { ...site, workBranch: `${site.workBranch}-${user.id.slice(0, 8)}`, legacyBranch: site.workBranch };
 }

@@ -1,5 +1,5 @@
 import { getUser, workspaceForUser } from '@/lib/auth';
-import { syncWorkBranch } from '@/lib/github';
+import { syncWorkBranch, turnOf } from '@/lib/github';
 import { latestDeploymentForBranch } from '@/lib/vercel';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ siteId: string }> }) {
@@ -24,6 +24,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
       ? await latestDeploymentForBranch(site, site.workBranch, sha => sha != null && pendingShas.has(sha)).catch(() => null)
       : null;
 
+  // The newest change did not build, so the preview is stuck on an older one.
+  // The editor repairs it with the AI once, or takes the change out again.
+  const head = pending[pending.length - 1];
+  let failed = null;
+  if (head && preview?.state === 'ERROR' && preview.commitSha === head.sha && preview.id) {
+    const turn = pending.map(c => turnOf(c.message)).filter(t => t !== null).at(-1) ?? null;
+    failed = {
+      sha: head.sha,
+      deploymentId: preview.id,
+      turn: turn?.id ?? null,
+      repaired: turn ? pending.some(c => { const t = turnOf(c.message); return t?.id === turn.id && t.repair; }) : false,
+    };
+  }
+
   return Response.json({
     pendingChanges: pending.length,
     preview: {
@@ -33,7 +47,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
       // while the first one builds. Never a URL that is still building, since
       // it cannot be framed.
       url: preview?.readyUrl ?? (/^https?:\/\//.test(productionUrl) ? productionUrl : `https://${productionUrl}`),
-      upToDate: pending.length === 0 || preview?.commitSha === pending[pending.length - 1].sha,
+      upToDate: pending.length === 0 || preview?.commitSha === head.sha,
+      failed,
     },
     productionUrl: site.productionUrl,
   });

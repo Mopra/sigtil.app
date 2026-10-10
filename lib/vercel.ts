@@ -3,6 +3,7 @@ import type { Site } from './db';
 const API = 'https://api.vercel.com';
 
 export type DeploymentInfo = {
+  id: string | null;
   state: 'QUEUED' | 'BUILDING' | 'READY' | 'ERROR' | 'CANCELED' | 'NONE';
   url: string | null;
   commitSha: string | null;
@@ -42,17 +43,39 @@ export async function latestDeploymentForBranch(
   );
   const deployments: any[] = body.deployments ?? [];
   const d = deployments[0];
-  if (!d) return { state: 'NONE', url: null, readyUrl: null, commitSha: null, createdAt: null };
+  if (!d) return { id: null, state: 'NONE', url: null, readyUrl: null, commitSha: null, createdAt: null };
   const ready = deployments.find(
     x => (x.readyState ?? x.state) === 'READY' && accept(x.meta?.githubCommitSha ?? null),
   );
   return {
+    id: d.uid ?? null,
     state: d.readyState ?? d.state ?? 'NONE',
     url: d.url ? `https://${d.url}` : null,
     readyUrl: ready?.url ? `https://${ready.url}` : null,
     commitSha: d.meta?.githubCommitSha ?? null,
     createdAt: d.createdAt ?? null,
   };
+}
+
+const LOG_LINES = 120;
+const LOG_CHARS = 12_000;
+
+/**
+ * The end of a failed build's output, where the error is. Only for a
+ * deployment of the site's own project, since it ends up in front of the AI.
+ */
+export async function buildLog(site: Site, deploymentId: string): Promise<string> {
+  const id = encodeURIComponent(deploymentId);
+  const deployment = await vercel(`/v13/deployments/${id}`, site.vercelTeamId);
+  if (deployment.projectId !== site.vercelProjectId) throw new Error('Deployment belongs to another project');
+  const events: any[] = await vercel(`/v3/deployments/${id}/events?builds=1&limit=-1`, site.vercelTeamId);
+  const lines = (Array.isArray(events) ? events : [])
+    .filter(e => e.type === 'stdout' || e.type === 'stderr' || e.type === 'command')
+    .flatMap(e => String(e.payload?.text ?? e.text ?? '').split('\n'))
+    .map(l => l.trimEnd())
+    .filter(Boolean);
+  const tail = lines.slice(-LOG_LINES).join('\n');
+  return tail.length > LOG_CHARS ? tail.slice(-LOG_CHARS) : tail;
 }
 
 /** Latest production deployment of the site's project. */
@@ -62,8 +85,9 @@ export async function latestProductionDeployment(site: Site): Promise<Deployment
     site.vercelTeamId,
   );
   const d = body.deployments?.[0];
-  if (!d) return { state: 'NONE', url: null, commitSha: null, createdAt: null };
+  if (!d) return { id: null, state: 'NONE', url: null, commitSha: null, createdAt: null };
   return {
+    id: d.uid ?? null,
     state: d.readyState ?? d.state ?? 'NONE',
     url: d.url ? `https://${d.url}` : null,
     commitSha: d.meta?.githubCommitSha ?? null,

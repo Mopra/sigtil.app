@@ -49,12 +49,17 @@ export const t = {
   previewTitle: 'Sådan kommer siden til at se ud',
   previewUpdating: 'Opdaterer',
   previewOpenNew: 'Åbn i nyt vindue',
+  previewRepairing: 'Retter en fejl',
   previewNone: 'Lav din første ændring, så dukker siden op her.',
   previewWidth: 'Skærmstørrelse',
   previewWidthMobile: 'Mobil',
   previewWidthTablet: 'Tablet',
   previewWidthFull: 'Fuld bredde',
   previewResize: 'Træk for at ændre bredden. Dobbeltklik for fuld bredde.',
+
+  // A change that broke the preview
+  buildRepairing: 'Ændringen kunne ikke vises. Jeg prøver at rette fejlen…',
+  buildUndone: 'Ændringen kunne ikke vises på siden, så jeg har fortrudt den. Siden er som før. Prøv gerne at sige det på en anden måde.',
 
   // Editing text directly in the preview
   inlineEdit: 'Ret tekst',

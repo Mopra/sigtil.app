@@ -9,8 +9,9 @@ import {
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { getUser, workspaceForUser } from '@/lib/auth';
 import { createSiteTools } from '@/lib/agent/tools';
-import { syncWorkBranch } from '@/lib/github';
-import { systemPrompt } from '@/lib/agent/system';
+import { syncWorkBranch, type Turn } from '@/lib/github';
+import { repairPrompt, systemPrompt } from '@/lib/agent/system';
+import { buildLog } from '@/lib/vercel';
 
 export const maxDuration = 300;
 
@@ -39,13 +40,45 @@ function withPageNote(message: UIMessage): UIMessage {
   return { ...message, parts: [{ type: 'text', text: `[Brugeren ser på siden ${page.slice(0, 200)}]` }, ...message.parts] };
 }
 
+/**
+ * A repair request asks the AI to fix its own change that broke the preview.
+ * The editor sees a short Danish note; the AI gets the instruction instead,
+ * and on the turn itself the end of the build output.
+ */
+function withRepair(message: UIMessage, log: string | null): UIMessage {
+  if (message.role !== 'user' || !(message.metadata as { repair?: unknown } | undefined)?.repair) return message;
+  return { ...message, parts: [{ type: 'text', text: repairPrompt(log) }] };
+}
+
+const TURN_ID = /^[\w-]{1,64}$/;
+
 export async function POST(req: Request) {
   const user = await getUser();
   if (!user) return new Response('Unauthorized', { status: 401 });
 
-  const { messages, siteId }: { messages: UIMessage[]; siteId: string } = await req.json();
+  const {
+    messages,
+    siteId,
+    repair,
+  }: { messages: UIMessage[]; siteId: string; repair?: { turn?: unknown; deploymentId?: unknown } } = await req.json();
   const site = await workspaceForUser(user, siteId);
   if (!site) return new Response('Forbidden', { status: 403 });
+
+  // Every change this turn makes is marked with it. A repair continues the
+  // turn it repairs, so a failed repair takes both out together.
+  let turn: Turn = { id: crypto.randomUUID() };
+  let log: string | null = null;
+  if (repair) {
+    if (typeof repair.turn !== 'string' || !TURN_ID.test(repair.turn) || typeof repair.deploymentId !== 'string') {
+      return new Response('Bad request', { status: 400 });
+    }
+    turn = { id: repair.turn, repair: true };
+    log = await buildLog(site, repair.deploymentId).catch(e => {
+      console.error('[chat] build log', e);
+      return null;
+    });
+  }
+  const last = messages.length - 1;
 
   // Every edit must start from the latest version of the site, never an older one.
   await syncWorkBranch(site);
@@ -53,8 +86,10 @@ export async function POST(req: Request) {
   const result = streamText({
     model,
     system: systemPrompt(site),
-    messages: await convertToModelMessages(messages.map(withPageNote)),
-    tools: createSiteTools(site),
+    messages: await convertToModelMessages(
+      messages.map((m, i) => withPageNote(withRepair(m, i === last ? log : null))),
+    ),
+    tools: createSiteTools(site, turn),
     stopWhen: isStepCount(15),
     onFinish({ providerMetadata }) {
       const usage = providerMetadata?.openrouter?.usage as

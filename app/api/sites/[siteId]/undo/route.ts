@@ -1,5 +1,5 @@
 import { getUser, workspaceForUser } from '@/lib/auth';
-import { resetWorkBranch, undoLastCommit } from '@/lib/github';
+import { dropTurn, resetWorkBranch, undoLastCommit } from '@/lib/github';
 
 export async function POST(req: Request, { params }: { params: Promise<{ siteId: string }> }) {
   const user = await getUser();
@@ -8,7 +8,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ siteId:
   const site = await workspaceForUser(user, siteId);
   if (!site) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
-  const { all }: { all?: boolean } = await req.json().catch(() => ({}));
+  const { all, failed }: { all?: boolean; failed?: { sha?: unknown; turn?: unknown } } = await req
+    .json()
+    .catch(() => ({}));
+
+  // A change that broke the preview and could not be repaired.
+  if (failed) {
+    if (typeof failed.sha !== 'string' || (failed.turn !== null && typeof failed.turn !== 'string')) {
+      return Response.json({ error: 'Bad request' }, { status: 400 });
+    }
+    return Response.json({ undone: await dropTurn(site, failed.turn, failed.sha) });
+  }
 
   if (all) {
     await resetWorkBranch(site);

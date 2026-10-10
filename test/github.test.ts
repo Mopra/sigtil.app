@@ -6,7 +6,7 @@ import { resetLocks } from './fake-db';
 vi.mock('@/lib/db', () => import('./fake-db'));
 
 const {
-  ensureWorkBranch, publishWork, syncWorkBranch, undoLastCommit, unpublishedCommits, updateFile, writeFile,
+  dropTurn, ensureWorkBranch, publishWork, turnOf, withTurn, syncWorkBranch, undoLastCommit, unpublishedCommits, updateFile, writeFile,
 } = await import('@/lib/github');
 
 const site = {
@@ -316,5 +316,48 @@ describe('writing to the work branch', () => {
     expect(gh.files(site.workBranch)['content/about.md']).toBe('one\n');
     expect(await undoLastCommit(site)).toBe(true);
     expect(await undoLastCommit(site)).toBe(false);
+  });
+});
+
+describe('taking out a chat turn that broke the preview', () => {
+  const head = () => gh.refs.get(site.workBranch)!;
+  const push = (files: Record<string, string>, message: string) => gh.push(site.workBranch, files, message, 'main');
+
+  it('marks commits with the turn and reads it back', () => {
+    expect(turnOf(withTurn('sigtil: x', { id: 't1' }))).toEqual({ id: 't1', repair: false });
+    expect(turnOf(withTurn('sigtil: x', { id: 't1', repair: true }))).toEqual({ id: 't1', repair: true });
+    expect(turnOf('sigtil: x')).toBeNull();
+    expect(withTurn('sigtil: x')).toBe('sigtil: x');
+  });
+
+  it('drops the turn and its repair, keeping changes before and after it', async () => {
+    push({ 'content/about.md': 'about us\n' }, withTurn('earlier', { id: 'old' }));
+    push({ 'content/home.md': 'title\nbroken\nbody\nfooter\n' }, withTurn('broke it', { id: 'bad' }));
+    push({ 'content/new.md': 'typed in preview\n' }, 'inline edit');
+    push({ 'content/home.md': 'title\nstill broken\nbody\nfooter\n' }, withTurn('repair', { id: 'bad', repair: true }));
+
+    expect(await dropTurn(site, 'bad', head())).toBe(true);
+
+    expect(gh.log(site.workBranch, 'main').map(m => m.split('\n')[0])).toEqual(['earlier', 'inline edit']);
+    expect(gh.files(site.workBranch)).toMatchObject({
+      'content/home.md': 'title\nintro\nbody\nfooter\n',
+      'content/about.md': 'about us\n',
+      'content/new.md': 'typed in preview\n',
+    });
+  });
+
+  it('without a turn, drops only the newest change', async () => {
+    push({ 'content/about.md': 'one\n' }, 'a');
+    push({ 'content/about.md': 'two\n' }, 'b');
+    expect(await dropTurn(site, null, head())).toBe(true);
+    expect(gh.log(site.workBranch, 'main')).toEqual(['a']);
+  });
+
+  it('does nothing if the branch moved on since the failure was seen', async () => {
+    const seen = push({ 'content/about.md': 'one\n' }, withTurn('a', { id: 'bad' }));
+    push({ 'content/about.md': 'two\n' }, 'newer');
+    const now = head();
+    expect(await dropTurn(site, 'bad', seen)).toBe(false);
+    expect(head()).toBe(now);
   });
 });

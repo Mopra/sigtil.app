@@ -247,6 +247,27 @@ function encodePath(path: string) {
 
 type Commit = { sha: string; message: string };
 
+/**
+ * Every commit a chat turn makes carries the turn's id in its message, so a
+ * turn that broke the preview can be taken out again as a whole. A turn that
+ * tries to repair a broken build reuses the id and is marked as the repair.
+ */
+const TURN = 'Sigtil-Turn';
+const REPAIR = 'Sigtil-Repair';
+
+export type Turn = { id: string; repair?: boolean };
+
+export function withTurn(message: string, turn?: Turn): string {
+  if (!turn) return message;
+  return `${message}\n\n${TURN}: ${turn.id}${turn.repair ? `\n${REPAIR}: yes` : ''}`;
+}
+
+export function turnOf(message: string): Turn | null {
+  const id = message.match(/^Sigtil-Turn: (\S+)$/m)?.[1];
+  if (!id) return null;
+  return { id, repair: /^Sigtil-Repair: yes$/m.test(message) };
+}
+
 async function compareWork(site: Site) {
   await ensureWorkBranch(site);
   const cmp = await gh(
@@ -315,21 +336,35 @@ async function rebaseOntoLive(site: Site): Promise<SyncResult> {
     return { pending: [] };
   }
 
-  const live = await snapshot(site, liveSha);
-  const tip = live.files;
-  let tipTree = live.tree;
-  let tipSha = liveSha;
+  const tipSha = await replayCommits(site, cmp.commits as any[], liveSha);
+
+  // Only something outside sigtil can have moved the branch while we held the
+  // lock. Leave it; the next sync starts over from what is there.
+  if ((await getBranchSha(site, site.workBranch)) !== pending[pending.length - 1].sha) return { pending };
+  await gh(site, refPath(site.workBranch), { method: 'PATCH', body: JSON.stringify({ sha: tipSha, force: true }) });
+  return { pending: await unpublishedCommits(site) };
+}
+
+/**
+ * Replay commits, oldest first, on top of `ontoSha`, one new commit each with
+ * the same message. Returns the new tip. Nothing points at it yet.
+ */
+async function replayCommits(site: Site, commits: any[], ontoSha: string): Promise<string> {
+  const onto = await snapshot(site, ontoSha);
+  const tip = onto.files;
+  let tipTree = onto.tree;
+  let tipSha = ontoSha;
   let prev: { sha: string; files: Map<string, Entry> } | null = null;
 
   // Merge commits carry nothing of the editor's own; skip them.
-  for (const c of (cmp.commits as any[]).filter(c => c.parents.length === 1)) {
+  for (const c of commits.filter(c => c.parents.length === 1)) {
     const parentSha = c.parents[0].sha as string;
     const base = prev?.sha === parentSha ? prev.files : (await snapshot(site, parentSha)).files;
     const ours = (await snapshot(site, c.sha)).files;
     prev = { sha: c.sha, files: ours };
 
     const entries = await replayChanges(site, base, ours, tip);
-    // Already live (someone made the same change): nothing left of it.
+    // Already there (someone made the same change): nothing left of it.
     if (entries.length === 0) continue;
     tipTree = (await gh(site, '/git/trees', {
       method: 'POST',
@@ -340,12 +375,7 @@ async function rebaseOntoLive(site: Site): Promise<SyncResult> {
       body: JSON.stringify({ message: c.commit.message, author: c.commit.author, tree: tipTree, parents: [tipSha] }),
     })).sha;
   }
-
-  // Only something outside sigtil can have moved the branch while we held the
-  // lock. Leave it; the next sync starts over from what is there.
-  if ((await getBranchSha(site, site.workBranch)) !== pending[pending.length - 1].sha) return { pending };
-  await gh(site, refPath(site.workBranch), { method: 'PATCH', body: JSON.stringify({ sha: tipSha, force: true }) });
-  return { pending: await unpublishedCommits(site) };
+  return tipSha;
 }
 
 /**
@@ -483,6 +513,28 @@ export async function undoLastCommit(site: Site): Promise<boolean> {
     const parent = commit.parents?.[0]?.sha;
     if (!parent) return false;
     await gh(site, refPath(site.workBranch), { method: 'PATCH', body: JSON.stringify({ sha: parent, force: true }) });
+    return true;
+  });
+}
+
+/**
+ * Take a chat turn's changes out of the working branch, keeping every change
+ * made before or after it. With no turn id, only the newest change goes.
+ * Does nothing (false) if the branch no longer ends at `headSha`, since then
+ * something new happened that the caller has not seen.
+ */
+export async function dropTurn(site: Site, turnId: string | null, headSha: string): Promise<boolean> {
+  return withBranchLock(site, async () => {
+    const { cmp, pending } = await compareWork(site);
+    if (pending.length === 0 || pending[pending.length - 1].sha !== headSha) return false;
+    const commits = cmp.commits as any[];
+    const dropped = (c: any, i: number) =>
+      turnId === null ? i === commits.length - 1 : turnOf(c.commit.message)?.id === turnId;
+    const first = commits.findIndex(dropped);
+    if (first === -1 || !commits[first].parents[0]) return false;
+    const kept = commits.slice(first).filter((c, i) => !dropped(c, first + i));
+    const tipSha = await replayCommits(site, kept, commits[first].parents[0].sha);
+    await gh(site, refPath(site.workBranch), { method: 'PATCH', body: JSON.stringify({ sha: tipSha, force: true }) });
     return true;
   });
 }

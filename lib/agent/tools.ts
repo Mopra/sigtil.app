@@ -10,6 +10,8 @@ import {
   writeFile,
   type TreeChange,
   type TreeEntry,
+  type Turn,
+  withTurn,
 } from '@/lib/github';
 import { pagesFromFiles } from '@/lib/pages';
 
@@ -87,7 +89,8 @@ function isFrontPage(path: string) {
   return pagesFromFiles([path]).some(p => p.route === '/');
 }
 
-export function createSiteTools(site: Site) {
+/** `turn` marks every change this chat turn makes, so it can be taken out again as a whole. */
+export function createSiteTools(site: Site, turn?: Turn) {
   return {
     listFiles: tool({
       description:
@@ -189,7 +192,7 @@ export function createSiteTools(site: Site) {
         const saved = await updateFile(site, path, content => {
           occurrences = content.split(oldText).length - 1;
           return occurrences === 1 ? content.replace(oldText, () => newText) : null;
-        }, `sigtil: ${summary}`);
+        }, withTurn(`sigtil: ${summary}`, turn));
         if (saved) return `Saved. ${path} updated.`;
         if (occurrences === 0) return 'The text to replace was not found. Read the file again and retry with the exact current text.';
         return `The text to replace appears ${occurrences} times. Include more surrounding context to make it unique.`;
@@ -207,7 +210,7 @@ export function createSiteTools(site: Site) {
         if (!isEditable(site, path)) {
           return `Refused: ${path} is not an editable location on this site.`;
         }
-        await writeFile(site, path, content, `sigtil: ${summary}`);
+        await writeFile(site, path, content, withTurn(`sigtil: ${summary}`, turn));
         return `Created ${path}.`;
       },
     }),
@@ -244,7 +247,7 @@ export function createSiteTools(site: Site) {
           }
           moved = changes.length / 2;
           return changes;
-        }, `sigtil: ${summary}`);
+        }, withTurn(`sigtil: ${summary}`, turn));
         return refused ?? `Moved ${moved} file(s). Now update links to the old location.`;
       },
     }),
@@ -267,7 +270,7 @@ export function createSiteTools(site: Site) {
           }
           deleted = files.length;
           return files.map(f => ({ path: f.path, mode: f.mode, sha: null }));
-        }, `sigtil: ${summary}`);
+        }, withTurn(`sigtil: ${summary}`, turn));
         return refused ?? `Deleted ${deleted} file(s).`;
       },
     }),

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SignOutButton } from '@clerk/nextjs';
-import Chat, { type ChatPrefill } from './Chat';
+import Chat, { type ChatPrefill, type RepairRequest } from './Chat';
 import PublishBar from './PublishBar';
 import { Mark } from './Logo';
 import PreviewFrame, { WidthPresets, type FrameWidth } from './PreviewFrame';
@@ -10,9 +10,12 @@ import { Icon, Menu, Spinner } from './ui';
 import { useInlineEdit } from './useInlineEdit';
 import { t } from '@/lib/strings';
 
+/** The newest change did not build. `turn` is the chat turn it most likely came from. */
+export type BuildFailure = { sha: string; deploymentId: string; turn: string | null; repaired: boolean };
+
 export type SiteStatus = {
   pendingChanges: number;
-  preview: { state: string; url: string | null; upToDate: boolean } | null;
+  preview: { state: string; url: string | null; upToDate: boolean; failed?: BuildFailure | null } | null;
   productionUrl: string;
 };
 
@@ -46,6 +49,15 @@ export default function Editor({
   // A newer build that waits to be shown until the editor is done with a text.
   const heldUrl = useRef<string | null>(null);
   const inlineBusy = useRef(false);
+  const [repair, setRepair] = useState<RepairRequest | null>(null);
+  const [notice, setNotice] = useState<{ text: string; id: number } | null>(null);
+  const [chatBusy, setChatBusy] = useState(false);
+  // When the status was asked for, and when the chat last finished: a status
+  // from before that can't have seen what the chat just changed.
+  const [statusAt, setStatusAt] = useState(0);
+  const chatIdleAt = useRef(0);
+  const repairedTurns = useRef(new Set<string>());
+  const undoing = useRef(false);
 
   const showPreview = useCallback((url: string) => {
     setPreviewUrl(url);
@@ -70,11 +82,13 @@ export default function Editor({
   }, [refreshPages]);
 
   const refreshStatus = useCallback(async () => {
+    const asked = Date.now();
     try {
       const res = await fetch(`/api/sites/${siteId}/status`);
       if (!res.ok) return;
       const next: SiteStatus = await res.json();
       setStatus(next);
+      setStatusAt(asked);
       // Reload the preview iframe when a fresh build becomes ready.
       const url = next.preview?.url ?? null;
       if (url && url !== lastReadyUrl.current) {
@@ -98,6 +112,41 @@ export default function Editor({
     refreshStatus();
     refreshPages();
   }, [refreshStatus, refreshPages]);
+
+  const onChatBusy = useCallback((busy: boolean) => {
+    setChatBusy(busy);
+    if (!busy) chatIdleAt.current = Date.now();
+  }, []);
+
+  // A change broke the preview. The AI gets one try to repair its own mistake;
+  // if the repair fails too (or changes nothing), the change is taken out and
+  // the editor is told. Never while the chat works, and only on a status asked
+  // for after it finished, which has seen what the chat changed.
+  const failed = status?.preview?.failed ?? null;
+  useEffect(() => {
+    if (!failed || chatBusy || undoing.current || statusAt <= chatIdleAt.current) return;
+    if (failed.turn && !failed.repaired && !repairedTurns.current.has(failed.turn)) {
+      repairedTurns.current.add(failed.turn);
+      setRepair({ turn: failed.turn, deploymentId: failed.deploymentId, id: Date.now() });
+      setView('chat');
+      return;
+    }
+    undoing.current = true;
+    fetch(`/api/sites/${siteId}/undo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ failed: { sha: failed.sha, turn: failed.turn } }),
+    })
+      .then(res => res.json())
+      .then(body => {
+        if (body.undone) setNotice({ text: t.buildUndone, id: Date.now() });
+      })
+      .catch(() => {})
+      .finally(() => {
+        undoing.current = false;
+        onEdited();
+      });
+  }, [failed?.sha, failed?.repaired, chatBusy, statusAt, siteId, onEdited]);
 
   const inline = useInlineEdit({
     siteId,
@@ -129,6 +178,7 @@ export default function Editor({
   const host = productionUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
 
   const previewBuilding =
+    !!failed ||
     (status?.preview && !status.preview.upToDate) ||
     status?.preview?.state === 'BUILDING' ||
     status?.preview?.state === 'QUEUED';
@@ -196,7 +246,15 @@ export default function Editor({
         <section
           className={`${view === 'chat' ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col overflow-hidden rounded-panel bg-surface shadow-float md:flex md:w-[400px] md:flex-none`}
         >
-          <Chat siteId={siteId} page={page} prefill={prefill} onEdited={onEdited} />
+          <Chat
+            siteId={siteId}
+            page={page}
+            prefill={prefill}
+            repair={repair}
+            notice={notice}
+            onBusyChange={onChatBusy}
+            onEdited={onEdited}
+          />
         </section>
 
         <section
@@ -277,7 +335,7 @@ export default function Editor({
               {previewBuilding && (
                 <span className="flex items-center gap-2 rounded-full bg-accent-soft px-3 py-1 text-[13px] font-medium text-accent">
                   <Spinner className="h-3 w-3" />
-                  {t.previewUpdating}
+                  {failed ? t.previewRepairing : t.previewUpdating}
                 </span>
               )}
               {previewUrl && (

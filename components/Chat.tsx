@@ -12,10 +12,16 @@ import { Icon, Spinner } from './ui';
  */
 export type ChatPrefill = { text: string; hint?: string; send?: boolean; id: number };
 
+/** Ask the AI to repair its change `turn`, whose build `deploymentId` failed. */
+export type RepairRequest = { turn: string; deploymentId: string; id: number };
+
 export default function Chat({
   siteId,
   page,
   prefill,
+  repair,
+  notice,
+  onBusyChange,
   onEdited,
 }: {
   siteId: string;
@@ -23,6 +29,10 @@ export default function Chat({
   page: string;
   /** Text to drop into the input for the editor to finish, e.g. from the page buttons. */
   prefill: ChatPrefill | null;
+  repair: RepairRequest | null;
+  /** Something the editor must know that did not come from the AI. Shown until the next message. */
+  notice: { text: string; id: number } | null;
+  onBusyChange: (busy: boolean) => void;
   onEdited: () => void;
 }) {
   const [input, setInput] = useState('');
@@ -44,6 +54,22 @@ export default function Chat({
   });
 
   const busy = status === 'submitted' || status === 'streaming';
+  const [shownNotice, setShownNotice] = useState<string | null>(null);
+
+  useEffect(() => onBusyChange(busy), [busy]);
+
+  useEffect(() => {
+    if (notice) setShownNotice(notice.text);
+  }, [notice]);
+
+  useEffect(() => {
+    if (!repair || busy) return;
+    setShownNotice(null);
+    sendMessage(
+      { text: t.buildRepairing, metadata: { page, repair: true } },
+      { body: { repair: { turn: repair.turn, deploymentId: repair.deploymentId } } },
+    );
+  }, [repair]);
   const lastIsAssistantText =
     messages.at(-1)?.role === 'assistant' && messages.at(-1)!.parts.some(p => p.type === 'text' && p.text);
 
@@ -87,6 +113,7 @@ export default function Chat({
   function submit(text: string) {
     if (!text.trim()) return;
     sendMessage({ text, metadata: { page } });
+    setShownNotice(null);
     setInput('');
     setHint(null);
   }
@@ -165,6 +192,14 @@ export default function Chat({
         {messages.map(message => {
           const text = message.parts.map(part => (part.type === 'text' ? part.text : '')).join('');
           if (!text) return null;
+          if (message.role === 'user' && (message.metadata as { repair?: boolean } | undefined)?.repair) {
+            return (
+              <div key={message.id} role="status" className="flex animate-rise items-center gap-2 text-sm text-ink-faint">
+                <Icon name="warning" size={15} className="shrink-0 text-accent" />
+                {text}
+              </div>
+            );
+          }
           return message.role === 'user' ? (
             <div key={message.id} className="flex animate-rise justify-end">
               <div className="max-w-[85%] whitespace-pre-wrap rounded-[1.25rem] rounded-br-md bg-accent px-4 py-2.5 text-[15px] leading-snug text-white">
@@ -189,6 +224,7 @@ export default function Chat({
           </div>
         )}
         {error && !busy && <Notice tone="danger">{t.chatFailed}</Notice>}
+        {shownNotice && !busy && <Notice tone="danger">{shownNotice}</Notice>}
         {uploading && (
           <div className="flex items-center gap-2 text-sm text-ink-faint">
             <Spinner className="text-accent" />

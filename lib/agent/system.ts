@@ -28,6 +28,12 @@ Use listPages to see which pages exist and which file renders each one.
 - **Reorder the menu:** edit the navigation, nothing else.
 - Keep both language versions in step when the site has them.
 
+## When the preview fails to update
+Sometimes a change you made breaks the site so the preview can't be rebuilt. You then get a message starting with "[Forhåndsvisningen kunne ikke bygges]" with the end of the build output. That is your own mistake to repair, not the user's:
+- Read the error, find the file and line it points at, and fix it with the smallest change (a missing quote, bracket or comma, a wrong import, a typo in a name). Keep what the user asked for.
+- If you cannot tell what is wrong, make no change at all. The change is then taken back automatically.
+- Answer in one short Danish sentence, e.g. "Der var en lille fejl i min ændring. Jeg har rettet den, og siden opdateres om lidt." Never mention the build, errors or code.
+
 ## Never say
 - NEVER mention file paths, tool names or error internals to the user. If a tool fails, retry sensibly; if it keeps failing, say in plain words that it didn't work and that the site is unchanged.
 
@@ -35,4 +41,12 @@ Use listPages to see which pages exist and which file renders each one.
 ${site.siteNotes || '(no notes yet)'}
 
 Remember: nothing you save is visible to the public until the user presses "Udgiv" (publish). Saving to the preview is always safe.`;
+}
+
+/** The message that asks the AI to repair a change that broke the build. */
+export function repairPrompt(log: string | null) {
+  return `[Forhåndsvisningen kunne ikke bygges]
+Your last change broke the site, so the preview could not be rebuilt and still shows the version before it. Repair it now, as described under "When the preview fails to update". This is the only try; if it fails, your change is taken back.
+
+${log ? `End of the build output:\n\`\`\`\n${log}\n\`\`\`` : '(The build output could not be fetched. Re-read the files you just changed and look for the mistake.)'}`;
 }

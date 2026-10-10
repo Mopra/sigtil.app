@@ -44,6 +44,7 @@ Next.js (App Router) · Tailwind 4 · AI SDK via OpenRouter · Drizzle + Postgre
    - `SIGTIL_ADMIN_EMAIL` — while no users exist, the first Clerk sign-in with this email becomes admin
    - `OPENROUTER_API_KEY` — from https://openrouter.ai/keys (one key, any model; switch models via `SIGTIL_MODEL`)
    - `VERCEL_TOKEN` — account token, used to read deployment status
+   - `SIGTIL_ENCRYPTION_KEY`: 32 random bytes, base64 (see `.env.example`). Encrypt existing plaintext tokens once with `node --env-file=.env.local --experimental-strip-types scripts/encrypt-tokens.ts`
    - `BLOB_READ_WRITE_TOKEN` — from a Vercel Blob store (only needed for video uploads)
 4. `npm run db:push` to create the tables.
 5. `npm run dev`, open `/sign-in`, sign in with the admin email → you land in `/admin`.
@@ -66,7 +67,7 @@ The work branch (`sigtil-edits`) is created automatically on first edit; Vercel 
 
 ## Known v1 limitations / roadmap
 
-- GitHub tokens are stored in plaintext in the DB — encrypt at rest (KMS or a `pgcrypto` column) before real multi-tenant use; replace PATs with a GitHub App.
+- GitHub tokens are encrypted at rest (AES-256-GCM, key in `SIGTIL_ENCRYPTION_KEY`). Replace PATs with a GitHub App.
 - Two editors don't see each other's unpublished changes in their previews. Whoever publishes last wins on lines both changed.
 - Login codes are single-factor; fine for invited family/staff, replace with magic-link email for a public product.
 - Preview iframe requires the target site not to send `X-Frame-Options: DENY` (Next.js default is fine).

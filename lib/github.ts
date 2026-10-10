@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { sql } from 'drizzle-orm';
 import { db, type Site } from './db';
+import { decryptSecret } from './db/crypto';
 import { isBinary, mergeText } from './merge';
 
 const API = 'https://api.github.com';
@@ -15,7 +16,7 @@ async function gh(site: Site, path: string, init?: RequestInit): Promise<any> {
   const res = await fetch(`${API}/repos/${site.repoOwner}/${site.repoName}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${site.githubToken}`,
+      Authorization: `Bearer ${decryptSecret(site.githubToken)}`,
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
       ...(init?.headers ?? {}),

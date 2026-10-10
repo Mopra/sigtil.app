@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db, siteMembers, sites, users } from '@/lib/db';
+import { encryptSecret } from '@/lib/db/crypto';
 import { getUser } from '@/lib/auth';
 
 async function requireAdmin() {
@@ -17,7 +18,7 @@ export async function createSite(formData: FormData) {
     name: String(formData.get('name')),
     repoOwner: String(formData.get('repoOwner')).trim(),
     repoName: String(formData.get('repoName')).trim(),
-    githubToken: String(formData.get('githubToken')).trim(),
+    githubToken: encryptSecret(String(formData.get('githubToken')).trim()),
     vercelProjectId: String(formData.get('vercelProjectId')).trim(),
     vercelTeamId: String(formData.get('vercelTeamId') ?? '').trim() || null,
     productionUrl: String(formData.get('productionUrl')).trim().replace(/\/$/, ''),

@@ -52,6 +52,11 @@ export const t = {
   previewUpdating: 'Opdaterer',
   previewOpenNew: 'Åbn i nyt vindue',
   previewNone: 'Lav din første ændring, så dukker siden op her.',
+  previewWidth: 'Skærmstørrelse',
+  previewWidthMobile: 'Mobil',
+  previewWidthTablet: 'Tablet',
+  previewWidthFull: 'Fuld bredde',
+  previewResize: 'Træk for at ændre bredden. Dobbeltklik for fuld bredde.',
 
   // Pages
   pagePicker: 'Vælg side',

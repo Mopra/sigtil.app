@@ -5,6 +5,7 @@ import { SignOutButton } from '@clerk/nextjs';
 import Chat, { type ChatPrefill } from './Chat';
 import PublishBar from './PublishBar';
 import { Mark } from './Logo';
+import PreviewFrame, { WidthPresets, type FrameWidth } from './PreviewFrame';
 import { Icon, Menu, Spinner } from './ui';
 import { t } from '@/lib/strings';
 
@@ -39,6 +40,7 @@ export default function Editor({
   const [page, setPage] = useState('/');
   const [prefill, setPrefill] = useState<ChatPrefill | null>(null);
   const [view, setView] = useState<'chat' | 'preview'>('chat');
+  const [frameWidth, setFrameWidth] = useState<FrameWidth>(null);
 
   const refreshPages = useCallback(async () => {
     try {
@@ -216,6 +218,7 @@ export default function Editor({
               <span className="px-1 text-sm text-ink-soft">{t.previewTitle}</span>
             )}
             <div className="flex shrink-0 items-center gap-1">
+              {previewUrl && <WidthPresets width={frameWidth} onChange={setFrameWidth} />}
               {previewBuilding && (
                 <span className="flex items-center gap-2 rounded-full bg-accent-soft px-3 py-1 text-[13px] font-medium text-accent">
                   <Spinner className="h-3 w-3" />
@@ -237,12 +240,7 @@ export default function Editor({
             </div>
           </div>
           {previewUrl ? (
-            <iframe
-              key={iframeKey}
-              src={previewUrl + pagePath}
-              className="relative z-0 min-h-0 w-full flex-1 border-0 bg-white"
-              title={t.previewTitle}
-            />
+            <PreviewFrame key={iframeKey} src={previewUrl + pagePath} width={frameWidth} onWidthChange={setFrameWidth} />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
               <Mark size={40} />

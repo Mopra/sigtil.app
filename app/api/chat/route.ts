@@ -9,6 +9,7 @@ import {
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { getUser, siteForUser } from '@/lib/auth';
 import { createSiteTools } from '@/lib/agent/tools';
+import { syncWorkBranch } from '@/lib/github';
 import { systemPrompt } from '@/lib/agent/system';
 
 export const maxDuration = 300;
@@ -45,6 +46,10 @@ export async function POST(req: Request) {
   const { messages, siteId }: { messages: UIMessage[]; siteId: string } = await req.json();
   const site = await siteForUser(user, siteId);
   if (!site) return new Response('Forbidden', { status: 403 });
+
+  // Every edit must start from the latest version of the site, never an older one.
+  const { conflict } = await syncWorkBranch(site);
+  if (conflict) return new Response('Conflict', { status: 409 });
 
   const result = streamText({
     model,

@@ -19,6 +19,9 @@ export const t = {
   chatPlaceholder: 'Skriv hvad der skal ændres…',
   chatEmpty: 'Fortæl mig hvad der skal ændres på siden — fx “Skift åbningstiderne til 12–22” eller “Sæt det nye billede ind øverst på forsiden”.',
   thinking: 'Arbejder på det…',
+  chatFailed: 'Det lykkedes ikke, og siden er uændret. Prøv igen.',
+  conflict:
+    'Siden er blevet ændret et andet sted, og det støder sammen med dine ændringer, der ikke er udgivet endnu. Tryk “Fortryd alle ændringer” for at fortsætte fra den nyeste version.',
   attach: 'Vedhæft billede, video eller PDF',
   uploading: 'Sender fil…',
   uploadFailed: 'Filen kunne ikke sendes. Prøv igen.',

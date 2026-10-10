@@ -11,6 +11,7 @@ export default function Chat({
   siteId,
   page,
   prefill,
+  locked = false,
   onEdited,
 }: {
   siteId: string;
@@ -18,6 +19,8 @@ export default function Chat({
   page: string;
   /** Text to drop into the input for the editor to finish, e.g. from the page buttons. */
   prefill: ChatPrefill | null;
+  /** The site changed elsewhere in a way that clashes with unpublished edits; no editing until resolved. */
+  locked?: boolean;
   onEdited: () => void;
 }) {
   const [input, setInput] = useState('');
@@ -27,7 +30,7 @@ export default function Chat({
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
       body: { siteId },
@@ -48,7 +51,7 @@ export default function Chat({
   }, [prefill]);
 
   function submit(text: string) {
-    if (!text.trim()) return;
+    if (!text.trim() || locked) return;
     sendMessage({ text, metadata: { page } });
     setInput('');
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
@@ -103,6 +106,8 @@ export default function Chat({
           </div>
         ))}
         {busy && <p className="text-sm text-stone-400">{t.thinking}</p>}
+        {error && !busy && <p className="text-sm text-red-600">{t.chatFailed}</p>}
+        {locked && <p className="rounded-2xl bg-red-50 p-4 text-[15px] leading-relaxed text-red-800">{t.conflict}</p>}
         {uploading && <p className="text-sm text-stone-400">{t.uploading}</p>}
         {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
         <div ref={bottomRef} />
@@ -129,7 +134,7 @@ export default function Chat({
           type="button"
           title={t.attach}
           aria-label={t.attach}
-          disabled={busy || uploading}
+          disabled={busy || uploading || locked}
           onClick={() => fileRef.current?.click()}
           className="rounded-xl border border-stone-300 p-2.5 text-stone-500 hover:border-accent hover:text-accent disabled:opacity-40"
         >
@@ -153,7 +158,7 @@ export default function Chat({
         />
         <button
           type="submit"
-          disabled={busy || !input.trim()}
+          disabled={busy || locked || !input.trim()}
           className="rounded-xl bg-accent px-4 py-2.5 font-semibold text-white disabled:opacity-40"
         >
           →

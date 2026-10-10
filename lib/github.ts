@@ -136,6 +136,81 @@ export async function unpublishedCommits(site: Site): Promise<Array<{ sha: strin
   return (cmp.commits as any[]).map(c => ({ sha: c.sha, message: c.commit.message }));
 }
 
+export type SyncResult = {
+  /** Unpublished changes, oldest first, after syncing. */
+  pending: Array<{ sha: string; message: string }>;
+  /** The live site and the unpublished changes touch the same files; editing must stop. */
+  conflict: boolean;
+};
+
+/**
+ * Bring the working branch up to date with the live site, so nobody ever edits
+ * (or previews) an older version than what is public. The live branch can move
+ * without sigtil, e.g. when a developer pushes to it.
+ *
+ * - Nothing unpublished: fast-forward onto the live branch.
+ * - Unpublished changes: replay them on top of the live branch, one commit each,
+ *   so the pending count and "Fortryd seneste ændring" keep working.
+ * - Both sides changed the same file: report a conflict and leave everything as is.
+ */
+export async function syncWorkBranch(site: Site): Promise<SyncResult> {
+  await ensureWorkBranch(site);
+  const cmp = await gh(
+    site,
+    `/compare/${encodeURIComponent(site.defaultBranch)}...${encodeURIComponent(site.workBranch)}`,
+  );
+  const commits = cmp.commits as any[];
+  const pending = commits.map(c => ({ sha: c.sha as string, message: c.commit.message as string }));
+  if (cmp.behind_by === 0) return { pending, conflict: false };
+
+  const liveSha = await getBranchSha(site, site.defaultBranch);
+  if (!liveSha) throw new Error(`Default branch ${site.defaultBranch} not found`);
+  const workRef = `/git/refs/${encodeURIComponent(`heads/${site.workBranch}`)}`;
+
+  if (cmp.ahead_by === 0) {
+    await gh(site, workRef, { method: 'PATCH', body: JSON.stringify({ sha: liveSha }) });
+    return { pending: [], conflict: false };
+  }
+
+  // What changed on the live site since the work branch split off.
+  const upstream = await gh(site, `/compare/${cmp.merge_base_commit.sha}...${liveSha}`);
+  const changedLive = new Set<string>(
+    (upstream.files as any[]).flatMap(f => [f.filename, f.previous_filename].filter(Boolean)),
+  );
+
+  // Merge commits carry nothing of the editor's own; skip them.
+  const own = commits.filter(c => c.parents.length === 1);
+  const details: any[] = [];
+  for (const c of own) details.push(await gh(site, `/commits/${c.sha}`));
+  const touched = details.flatMap(d => (d.files as any[]).flatMap(f => [f.filename, f.previous_filename].filter(Boolean)));
+  if (touched.some(p => changedLive.has(p))) return { pending, conflict: true };
+
+  let parent = liveSha;
+  let tree = (await gh(site, `/git/commits/${liveSha}`)).tree.sha as string;
+  for (const d of details) {
+    const entries = (d.files as any[]).flatMap(f => {
+      if (f.status === 'removed') return [{ path: f.filename, sha: null }];
+      const moved = f.previous_filename ? [{ path: f.previous_filename, sha: null }] : [];
+      return [...moved, { path: f.filename, sha: f.sha }];
+    });
+    tree = (await gh(site, '/git/trees', {
+      method: 'POST',
+      body: JSON.stringify({ base_tree: tree, tree: entries.map(e => ({ ...e, mode: '100644', type: 'blob' })) }),
+    })).sha;
+    parent = (await gh(site, '/git/commits', {
+      method: 'POST',
+      body: JSON.stringify({ message: d.commit.message, tree, parents: [parent] }),
+    })).sha;
+  }
+
+  // An edit landed while we replayed: leave it, the next sync picks it up.
+  if ((await getBranchSha(site, site.workBranch)) !== pending[pending.length - 1].sha) {
+    return { pending, conflict: false };
+  }
+  await gh(site, workRef, { method: 'PATCH', body: JSON.stringify({ sha: parent, force: true }) });
+  return { pending: await unpublishedCommits(site), conflict: false };
+}
+
 /** Merge the working branch into the default branch. Returns the merge commit sha, or null if nothing to merge. */
 export async function mergeWorkIntoDefault(site: Site): Promise<string | null> {
   try {

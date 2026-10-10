@@ -8,6 +8,7 @@ import { t } from '@/lib/strings';
 
 export type SiteStatus = {
   pendingChanges: number;
+  conflict: boolean;
   preview: { state: string; url: string | null; upToDate: boolean } | null;
   productionUrl: string;
 };
@@ -112,7 +113,7 @@ export default function Editor({
 
       <div className="flex min-h-0 flex-1">
         <div className="flex w-[420px] shrink-0 flex-col border-r border-stone-200 bg-white">
-          <Chat siteId={siteId} page={page} prefill={prefill} onEdited={onEdited} />
+          <Chat siteId={siteId} page={page} prefill={prefill} locked={status?.conflict ?? false} onEdited={onEdited} />
         </div>
 
         <div className="relative flex-1 bg-stone-100">

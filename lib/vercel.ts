@@ -24,14 +24,17 @@ async function vercel(path: string, teamId?: string | null): Promise<any> {
 }
 
 /**
- * Latest deployment for a git branch of the site's project, plus `readyUrl` —
- * the newest one that finished building. While a build is queued or running its
- * own URL serves a Vercel system page that refuses to be framed, so the preview
- * has to keep pointing at the last good build until the new one lands.
+ * Latest deployment for a git branch of the site's project, plus `readyUrl`:
+ * the newest one that finished building from a commit `accept` allows. While a
+ * build is queued or running its own URL serves a Vercel system page that
+ * refuses to be framed, so the preview has to keep pointing at the last good
+ * build until the new one lands. `accept` keeps that fallback from reaching
+ * back to a build older than the live site.
  */
 export async function latestDeploymentForBranch(
   site: Site,
   branch: string,
+  accept: (commitSha: string | null) => boolean = () => true,
 ): Promise<DeploymentInfo & { readyUrl: string | null }> {
   const body = await vercel(
     `/v6/deployments?projectId=${site.vercelProjectId}&limit=10&meta-githubCommitRef=${encodeURIComponent(branch)}`,
@@ -40,7 +43,9 @@ export async function latestDeploymentForBranch(
   const deployments: any[] = body.deployments ?? [];
   const d = deployments[0];
   if (!d) return { state: 'NONE', url: null, readyUrl: null, commitSha: null, createdAt: null };
-  const ready = deployments.find(x => (x.readyState ?? x.state) === 'READY');
+  const ready = deployments.find(
+    x => (x.readyState ?? x.state) === 'READY' && accept(x.meta?.githubCommitSha ?? null),
+  );
   return {
     state: d.readyState ?? d.state ?? 'NONE',
     url: d.url ? `https://${d.url}` : null,

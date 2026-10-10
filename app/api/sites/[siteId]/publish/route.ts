@@ -1,5 +1,5 @@
 import { getUser, siteForUser } from '@/lib/auth';
-import { mergeWorkIntoDefault, resetWorkBranch, unpublishedCommits } from '@/lib/github';
+import { mergeWorkIntoDefault, resetWorkBranch, syncWorkBranch } from '@/lib/github';
 import { waitForProduction } from '@/lib/vercel';
 
 // Publishing blocks until the production deployment is verified live.
@@ -12,7 +12,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ siteId
   const site = await siteForUser(user, siteId);
   if (!site) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
-  const pending = await unpublishedCommits(site);
+  // Publish exactly what the preview showed: the changes on top of the live site.
+  const { pending, conflict } = await syncWorkBranch(site);
+  if (conflict) return Response.json({ live: false, conflict: true }, { status: 409 });
   if (pending.length === 0) return Response.json({ live: true, alreadyPublished: true });
 
   let mergeSha: string | null;

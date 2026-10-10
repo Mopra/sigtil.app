@@ -21,6 +21,12 @@ const APP_PAGE = /^(?:src\/)?app\/(?:(.*)\/)?page\.(?:tsx|jsx|ts|js|mdx|md)$/;
 const PAGES_PAGE = /^(?:src\/)?pages\/(.+)\.(?:tsx|jsx|ts|js|mdx|md|astro)$/;
 const HTML_PAGE = /^(?:public\/)?(.+)\.html$/;
 const IGNORED_DIRS = /(^|\/)(node_modules|\.next|dist|build|out)\//;
+/**
+ * A leading language segment, e.g. app/[locale]/menu/page.tsx. It isn't a real
+ * placeholder for our purposes: "/menu" gets sent on to the right language by
+ * the site itself, so drop it from the URL.
+ */
+const LOCALE_SEGMENT = /^\[(?:locale|lang|lng|language)\]$/;
 
 export function pagesFromFiles(paths: string[]): SitePage[] {
   const pages: SitePage[] = [];
@@ -62,6 +68,7 @@ export function pagesFromFiles(paths: string[]): SitePage[] {
 }
 
 function addPage(pages: SitePage[], segments: string[], file: string) {
+  if (segments.length > 0 && LOCALE_SEGMENT.test(segments[0])) segments = segments.slice(1);
   const route = '/' + segments.join('/');
   if (pages.some(p => p.route === route)) return; // e.g. a route in both app/ and pages/
   pages.push({

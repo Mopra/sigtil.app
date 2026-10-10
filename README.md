@@ -48,6 +48,10 @@ Next.js (App Router) · Tailwind 4 · AI SDK via OpenRouter · Drizzle + Postgre
 
 Auth is Clerk (identity) + invite-only authorization in the DB: admins invite users by email in `/admin`, and the first Clerk sign-in with that email links the account. A Clerk account that isn't invited sees a "no access" page.
 
+## Tests
+
+`npm test` runs Vitest. `test/merge.test.ts` covers the line merge; `test/github.test.ts` runs sync, publish, undo and file writes against `test/fake-github.ts`, an in-memory GitHub repo, with the Postgres branch lock faked in `test/fake-db.ts`. No network or database needed.
+
 ## Connecting a site (per site)
 
 1. Create a **fine-grained GitHub PAT** scoped to that one repo, permission *Contents: read & write*.

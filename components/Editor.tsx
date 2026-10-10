@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SignOutButton } from '@clerk/nextjs';
+import type { UIMessage } from 'ai';
 import Chat, { type ChatPrefill, type RepairRequest } from './Chat';
 import PublishBar from './PublishBar';
 import { Mark } from './Logo';
@@ -30,11 +31,14 @@ export default function Editor({
   siteId,
   siteName,
   productionUrl,
+  initialChat,
   showSitesLink = false,
 }: {
   siteId: string;
   siteName: string;
   productionUrl: string;
+  /** The editor's saved conversation, so a visit continues the last one. */
+  initialChat: UIMessage[];
   showSitesLink?: boolean;
 }) {
   const [status, setStatus] = useState<SiteStatus | null>(null);
@@ -253,6 +257,7 @@ export default function Editor({
         >
           <Chat
             siteId={siteId}
+            initialMessages={initialChat}
             page={page}
             prefill={prefill}
             repair={repair}

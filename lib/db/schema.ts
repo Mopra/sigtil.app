@@ -38,5 +38,14 @@ export const siteMembers = pgTable('site_members', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
 }, t => [primaryKey({ columns: [t.siteId, t.userId] })]);
 
+// One running conversation per editor and site, as AI SDK UI messages, so a
+// visit picks up where the last one left off. Trimmed in lib/chat.ts.
+export const chats = pgTable('chats', {
+  siteId: uuid('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  messages: jsonb('messages').$type<unknown[]>().notNull().default([]),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, t => [primaryKey({ columns: [t.siteId, t.userId] })]);
+
 export type User = typeof users.$inferSelect;
 export type Site = typeof sites.$inferSelect;

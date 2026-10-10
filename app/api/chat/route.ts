@@ -1,10 +1,12 @@
 import {
   convertToModelMessages,
+  createIdGenerator,
   createUIMessageStreamResponse,
   isStepCount,
   streamText,
   toUIMessageStream,
   type UIMessage,
+  validateUIMessages,
 } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { getUser, workspaceForUser } from '@/lib/auth';
@@ -12,6 +14,8 @@ import { createSiteTools } from '@/lib/agent/tools';
 import { syncWorkBranch, type Turn } from '@/lib/github';
 import { repairPrompt, systemPrompt } from '@/lib/agent/system';
 import { buildLog } from '@/lib/vercel';
+import { forModel, textOnly } from '@/lib/chat';
+import { clearChat, loadChat, saveChat } from '@/lib/chat-store';
 
 export const maxDuration = 300;
 
@@ -57,12 +61,15 @@ export async function POST(req: Request) {
   if (!user) return new Response('Unauthorized', { status: 401 });
 
   const {
-    messages,
+    message,
     siteId,
     repair,
-  }: { messages: UIMessage[]; siteId: string; repair?: { turn?: unknown; deploymentId?: unknown } } = await req.json();
+  }: { message: UIMessage; siteId: string; repair?: { turn?: unknown; deploymentId?: unknown } } = await req.json();
   const site = await workspaceForUser(user, siteId);
   if (!site) return new Response('Forbidden', { status: 403 });
+  if (message?.role !== 'user' || !Array.isArray(message.parts) || typeof message.id !== 'string') {
+    return new Response('Bad request', { status: 400 });
+  }
 
   // Every change this turn makes is marked with it. A repair continues the
   // turn it repairs, so a failed repair takes both out together.
@@ -78,7 +85,24 @@ export async function POST(req: Request) {
       return null;
     });
   }
-  const last = messages.length - 1;
+  const tools = createSiteTools(site, turn);
+  // The SDK's types reject typed tools here, though it only reads their schemas.
+  const schemas = tools as unknown as Parameters<typeof validateUIMessages>[0]['tools'];
+
+  // The saved conversation is the history; the browser only sends the new
+  // message. Sending the same message again (a retry) replaces it.
+  let messages = (await loadChat(site.id, user.id)).filter(m => m.id !== message.id);
+  messages = [...messages, message];
+  try {
+    messages = await validateUIMessages({ messages, tools: schemas });
+  } catch (e) {
+    // History saved by an older version whose tool calls no longer fit: keep
+    // what was said, drop what was done.
+    console.error('[chat] stored history', e);
+    messages = await validateUIMessages({ messages: textOnly(messages), tools: schemas }).catch(() => [message]);
+  }
+  const sent = forModel(messages);
+  const last = sent.length - 1;
 
   // Every edit must start from the latest version of the site, never an older one.
   await syncWorkBranch(site);
@@ -87,9 +111,9 @@ export async function POST(req: Request) {
     model,
     system: systemPrompt(site),
     messages: await convertToModelMessages(
-      messages.map((m, i) => withPageNote(withRepair(m, i === last ? log : null))),
+      sent.map((m, i) => withPageNote(withRepair(m, i === last ? log : null))),
     ),
-    tools: createSiteTools(site, turn),
+    tools,
     stopWhen: isStepCount(15),
     onFinish({ providerMetadata }) {
       const usage = providerMetadata?.openrouter?.usage as
@@ -104,7 +128,27 @@ export async function POST(req: Request) {
     },
   });
 
+  // Finish the turn, and save it, even if the editor closes the tab mid-answer.
+  void result.consumeStream();
+
   return createUIMessageStreamResponse({
-    stream: toUIMessageStream({ stream: result.stream }),
+    stream: toUIMessageStream({
+      stream: result.stream,
+      originalMessages: messages,
+      generateMessageId: createIdGenerator({ prefix: 'msg', size: 16 }),
+      onEnd: ({ messages }) =>
+        saveChat(site.id, user.id, messages).catch(e => console.error('[chat] save', e)),
+    }),
   });
+}
+
+/** "Start forfra": forget this editor's conversation about the site. */
+export async function DELETE(req: Request) {
+  const user = await getUser();
+  if (!user) return new Response('Unauthorized', { status: 401 });
+  const siteId = new URL(req.url).searchParams.get('siteId') ?? '';
+  const site = await workspaceForUser(user, siteId);
+  if (!site) return new Response('Forbidden', { status: 403 });
+  await clearChat(site.id, user.id);
+  return new Response(null, { status: 204 });
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport } from 'ai';
+import { DefaultChatTransport, type UIMessage } from 'ai';
 import { t } from '@/lib/strings';
 import { Icon, Spinner } from './ui';
 
@@ -17,6 +17,7 @@ export type RepairRequest = { turn: string; deploymentId: string; id: number };
 
 export default function Chat({
   siteId,
+  initialMessages,
   page,
   prefill,
   repair,
@@ -25,6 +26,7 @@ export default function Chat({
   onEdited,
 }: {
   siteId: string;
+  initialMessages: UIMessage[];
   /** Page open in the preview, sent along so "denne side" means something. */
   page: string;
   /** Text to drop into the input for the editor to finish, e.g. from the page buttons. */
@@ -45,10 +47,13 @@ export default function Chat({
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, setMessages, sendMessage, status, error, clearError } = useChat({
+    messages: initialMessages,
     transport: new DefaultChatTransport({
       api: '/api/chat',
       body: { siteId },
+      // The server keeps the conversation; it only needs the new message.
+      prepareSendMessagesRequest: ({ messages, body }) => ({ body: { ...body, message: messages.at(-1) } }),
     }),
     onFinish: () => onEdited(),
   });
@@ -110,6 +115,14 @@ export default function Chat({
     box.classList.add('animate-beckon');
   }, [prefill]);
 
+  async function restart() {
+    const res = await fetch(`/api/chat?siteId=${encodeURIComponent(siteId)}`, { method: 'DELETE' }).catch(() => null);
+    if (!res?.ok) return;
+    setMessages([]);
+    clearError();
+    setShownNotice(null);
+  }
+
   function submit(text: string) {
     if (!text.trim()) return;
     sendMessage({ text, metadata: { page } });
@@ -170,6 +183,19 @@ export default function Chat({
       )}
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-4 pt-6">
+        {messages.length > 0 && !busy && (
+          <div className="-mt-3 flex justify-end">
+            <button
+              type="button"
+              title={t.chatRestartHint}
+              onClick={restart}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-ink-soft transition hover:bg-accent-soft hover:text-accent"
+            >
+              <Icon name="plus" size={15} />
+              {t.chatRestart}
+            </button>
+          </div>
+        )}
         {messages.length === 0 && (
           <div className="animate-rise pt-4">
             <h2 className="text-[26px] font-semibold leading-tight tracking-tight">{t.chatHello}</h2>

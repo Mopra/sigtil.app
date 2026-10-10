@@ -32,6 +32,8 @@ export const t = {
     'Lav en ny side der hedder ',
   ],
   thinking: 'Arbejder på det',
+  chatRestart: 'Start forfra',
+  chatRestartHint: 'Ryd samtalen. Dine ændringer på siden bliver ikke rørt.',
   chatFailed: 'Det lykkedes ikke, og siden er uændret. Prøv igen.',
   send: 'Send',
   attach: 'Vedhæft billede, video eller PDF',

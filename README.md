@@ -23,6 +23,7 @@ editor prompt ──▶ /api/chat (AI agent with file tools)
 - **Uploads:** images are optimized (sharp → WebP, max 2000px) and committed into `public/uploads/`; videos go to Vercel Blob and are referenced by URL.
 - **Undo:** last change (drops the newest unpublished commit) or everything (resets the work branch onto main). Each editor has their own work branch, so undo only ever touches your own changes.
 - **A change that breaks the build:** every commit a chat turn makes carries a `Sigtil-Turn: <id>` line. When the newest change's branch build is `ERROR`, the status route reports it, and the editor sends the AI one repair turn with the end of the build log (`buildLog` in `lib/vercel.ts`). The repair reuses the turn id, marked `Sigtil-Repair: yes`. If its build fails too, or it changed nothing, `dropTurn` takes the whole turn out (keeping changes before and after it) and the editor is told in plain Danish.
+- **Chat history:** each editor has one running conversation per site (`chats` table), saved when a turn ends and loaded with the editor page, so a visit picks up where the last one left off. The browser sends only the new message; the server holds the history. The AI sees the last 6 to 11 turns (`forModel` in `lib/chat.ts`), cut in blocks of 6 so the prompt cache keeps hitting; the newest 40 are kept. **Start forfra** clears it and leaves the site alone.
 - **Several editors, and developers, at once:** nobody is ever asked to resolve anything.
   - Every editor gets their own work branch (`<workBranch>-<first 8 of user id>`), with its own preview and publish.
   - `main` can move under you (someone else publishes, a developer pushes). On every status poll, chat turn and publish, `syncWorkBranch` replays your unpublished commits on top of `main`. Files changed on both sides are merged line by line (`lib/merge.ts`); where both changed the same lines, the editor's version wins. Binary files: the editor's version wins. A move keeps a developer's edit to the moved file.
@@ -66,7 +67,6 @@ The work branch (`sigtil-edits`) is created automatically on first edit; Vercel 
 ## Known v1 limitations / roadmap
 
 - GitHub tokens are stored in plaintext in the DB — encrypt at rest (KMS or a `pgcrypto` column) before real multi-tenant use; replace PATs with a GitHub App.
-- Chat history is not persisted (each visit starts fresh).
 - Two editors don't see each other's unpublished changes in their previews. Whoever publishes last wins on lines both changed.
 - Login codes are single-factor; fine for invited family/staff, replace with magic-link email for a public product.
 - Preview iframe requires the target site not to send `X-Frame-Options: DENY` (Next.js default is fine).

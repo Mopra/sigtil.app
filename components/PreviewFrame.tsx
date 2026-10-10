@@ -155,9 +155,11 @@ export default function PreviewFrame({
         )}
       </div>
       {(constrained || dragging) && handle('right')}
-      {/* At full width the handle sits on the right edge, ready to drag inward. */}
+      {/* At full width the handle sits in its own gutter on the right edge, ready
+          to drag inward. A gutter rather than an overlay, so it never covers the
+          page's scrollbar. */}
       {!constrained && !dragging && (
-        <div className="absolute inset-y-0 right-0 hidden w-3 md:block">
+        <div className="hidden w-2 shrink-0 md:block">
           <div
             role="separator"
             aria-orientation="vertical"

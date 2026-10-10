@@ -48,10 +48,12 @@ export default function PreviewFrame({
   src,
   width,
   onWidthChange,
+  frameRef,
 }: {
   src: string;
   width: FrameWidth;
   onWidthChange: (w: FrameWidth) => void;
+  frameRef?: React.Ref<HTMLIFrameElement>;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [boxWidth, setBoxWidth] = useState(0);
@@ -146,6 +148,7 @@ export default function PreviewFrame({
         style={shown !== null ? { width: shown } : undefined}
       >
         <iframe
+          ref={frameRef}
           src={src}
           className={`h-full w-full border-0 bg-white ${dragging ? 'pointer-events-none' : ''}`}
           title={t.previewTitle}

@@ -6,8 +6,11 @@ import { DefaultChatTransport } from 'ai';
 import { t } from '@/lib/strings';
 import { Icon, Spinner } from './ui';
 
-/** `hint` tells the editor what to do with the filled-in text, shown above the input. */
-export type ChatPrefill = { text: string; hint?: string; id: number };
+/**
+ * `hint` tells the editor what to do with the filled-in text, shown above the input.
+ * `send` sends it at once instead, e.g. a text changed in the preview that the AI must place.
+ */
+export type ChatPrefill = { text: string; hint?: string; send?: boolean; id: number };
 
 export default function Chat({
   siteId,
@@ -70,6 +73,10 @@ export default function Chat({
 
   useEffect(() => {
     if (!prefill) return;
+    if (prefill.send && !busy && !locked) {
+      submit(prefill.text);
+      return;
+    }
     fill(prefill.text);
     setHint(prefill.hint ? { text: prefill.hint, id: prefill.id } : null);
     // Pulse the input so the eye lands on it, restarting if it is already pulsing.

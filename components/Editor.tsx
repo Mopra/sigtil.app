@@ -7,6 +7,7 @@ import PublishBar from './PublishBar';
 import { Mark } from './Logo';
 import PreviewFrame, { WidthPresets, type FrameWidth } from './PreviewFrame';
 import { Icon, Menu, Spinner } from './ui';
+import { useInlineEdit } from './useInlineEdit';
 import { t } from '@/lib/strings';
 
 export type SiteStatus = {
@@ -41,6 +42,16 @@ export default function Editor({
   const [prefill, setPrefill] = useState<ChatPrefill | null>(null);
   const [view, setView] = useState<'chat' | 'preview'>('chat');
   const [frameWidth, setFrameWidth] = useState<FrameWidth>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const [editText, setEditText] = useState(false);
+  // A newer build that waits to be shown until the editor is done with a text.
+  const heldUrl = useRef<string | null>(null);
+  const inlineBusy = useRef(false);
+
+  const showPreview = useCallback((url: string) => {
+    setPreviewUrl(url);
+    setIframeKey(k => k + 1);
+  }, []);
 
   const refreshPages = useCallback(async () => {
     try {
@@ -69,13 +80,14 @@ export default function Editor({
       const url = next.preview?.url ?? null;
       if (url && url !== lastReadyUrl.current) {
         lastReadyUrl.current = url;
-        setPreviewUrl(url);
-        setIframeKey(k => k + 1);
+        // Reloading now would throw away a text being typed in the preview.
+        if (inlineBusy.current) heldUrl.current = url;
+        else showPreview(url);
       }
     } catch {
       // transient, the next poll will recover
     }
-  }, [siteId]);
+  }, [siteId, showPreview]);
 
   useEffect(() => {
     refreshStatus();
@@ -87,6 +99,28 @@ export default function Editor({
     refreshStatus();
     refreshPages();
   }, [refreshStatus, refreshPages]);
+
+  const locked = status?.conflict ?? false;
+  const inline = useInlineEdit({
+    siteId,
+    frameRef,
+    frameKey: iframeKey,
+    origin: previewUrl ? new URL(previewUrl).origin : null,
+    on: editText && !locked,
+    onSaved: onEdited,
+    onHandOff: (from, to) => {
+      setPrefill({ text: t.inlineEditHandOff(from, to), send: true, id: Date.now() });
+      setView('chat');
+    },
+  });
+
+  useEffect(() => {
+    inlineBusy.current = inline.busy;
+    if (!inline.busy && heldUrl.current) {
+      showPreview(heldUrl.current);
+      heldUrl.current = null;
+    }
+  }, [inline.busy, showPreview]);
 
   const pagePath = page === '/' ? '' : page;
   const currentLabel = pages.find(p => p.route === page)?.label ?? page;
@@ -227,6 +261,21 @@ export default function Editor({
               <span className="px-1 text-sm text-ink-soft">{t.previewTitle}</span>
             )}
             <div className="flex shrink-0 items-center gap-1">
+              {inline.ready && (
+                <button
+                  type="button"
+                  onClick={() => setEditText(on => !on)}
+                  disabled={locked}
+                  title={t.inlineEditTitle}
+                  aria-pressed={editText}
+                  className={`flex h-8 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition disabled:opacity-40 ${
+                    editText ? 'bg-accent text-white hover:bg-accent-hover' : 'text-ink-soft hover:bg-canvas hover:text-ink'
+                  }`}
+                >
+                  <Icon name="pencil" size={15} />
+                  {t.inlineEdit}
+                </button>
+              )}
               {previewUrl && <WidthPresets width={frameWidth} onChange={setFrameWidth} />}
               {previewBuilding && (
                 <span className="flex items-center gap-2 rounded-full bg-accent-soft px-3 py-1 text-[13px] font-medium text-accent">
@@ -248,8 +297,25 @@ export default function Editor({
               )}
             </div>
           </div>
+          {previewUrl && inline.ready && editText && !locked && (
+            <div
+              role="status"
+              className={`flex shrink-0 items-center justify-center gap-2 px-4 py-2 text-[13px] font-medium ${
+                inline.failed ? 'bg-danger-soft text-danger' : 'bg-accent-soft text-accent'
+              }`}
+            >
+              <Icon name={inline.failed ? 'warning' : 'pencil'} size={14} />
+              {inline.failed ? t.inlineEditFailed : t.inlineEditHint}
+            </div>
+          )}
           {previewUrl ? (
-            <PreviewFrame key={iframeKey} src={previewUrl + pagePath} width={frameWidth} onWidthChange={setFrameWidth} />
+            <PreviewFrame
+              key={iframeKey}
+              frameRef={frameRef}
+              src={previewUrl + pagePath}
+              width={frameWidth}
+              onWidthChange={setFrameWidth}
+            />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
               <Mark size={40} />

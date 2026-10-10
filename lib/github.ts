@@ -101,6 +101,21 @@ export async function readFile(site: Site, path: string): Promise<{ content: str
   return { content: Buffer.from(file.content, 'base64').toString('utf8'), sha: file.sha };
 }
 
+// A blob's content never changes for its sha, so a cache needs no invalidation.
+const blobCache = new Map<string, string>();
+const BLOB_CACHE_MAX = 2000;
+
+/** Text of a file by its blob sha (from listTree). Cached across requests. */
+export async function readBlob(site: Site, sha: string): Promise<string> {
+  const cached = blobCache.get(sha);
+  if (cached !== undefined) return cached;
+  const blob = await gh(site, `/git/blobs/${sha}`);
+  const content = Buffer.from(blob.content, 'base64').toString('utf8');
+  if (blobCache.size >= BLOB_CACHE_MAX) blobCache.delete(blobCache.keys().next().value!);
+  blobCache.set(sha, content);
+  return content;
+}
+
 /** Create or update a file on the working branch (one commit per call). */
 export async function writeFile(site: Site, path: string, content: Buffer | string, message: string) {
   await ensureWorkBranch(site);

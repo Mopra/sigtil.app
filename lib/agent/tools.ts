@@ -1,7 +1,7 @@
 import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
 import type { Site } from '@/lib/db';
-import { commitTreeChanges, listTree, readFile, writeFile, type TreeEntry } from '@/lib/github';
+import { commitTreeChanges, listTree, readBlob, readFile, writeFile, type TreeEntry } from '@/lib/github';
 import { pagesFromFiles } from '@/lib/pages';
 
 const ALWAYS_BLOCKED = [
@@ -32,11 +32,11 @@ const MAX_FILE_CHARS = 60_000;
 const SEARCHABLE = /\.(tsx?|jsx?|mdx?|json|ya?ml|css|scss|html|txt|svg)$/i;
 /** Skip blobs this large when searching; they are never hand-written content. */
 const MAX_SEARCHABLE_BYTES = 200_000;
-const MAX_SEARCHED_FILES = 80;
+const MAX_SEARCHED_FILES = 400;
 const MAX_MATCHES = 50;
 
 /** Files the agent is allowed to touch — the only ones worth listing or searching. */
-function editableTree(site: Site, tree: Array<{ path: string; size: number }>) {
+function editableTree(site: Site, tree: TreeEntry[]) {
   return tree.filter(t => isEditable(site, t.path));
 }
 
@@ -46,6 +46,21 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
     out.push(...(await Promise.all(items.slice(i, i + limit).map(fn))));
   }
   return out;
+}
+
+/** The text of every editable, hand-written file: what is worth searching. */
+export async function readTextFiles(site: Site): Promise<Array<{ path: string; content: string }>> {
+  const candidates = editableTree(site, await listTree(site))
+    .filter(t => SEARCHABLE.test(t.path) && t.size <= MAX_SEARCHABLE_BYTES)
+    .slice(0, MAX_SEARCHED_FILES);
+  const files = await mapLimit(candidates, 8, async ({ path, sha }) => {
+    try {
+      return [{ path, content: await readBlob(site, sha) }];
+    } catch {
+      return []; // unreadable blob, skip rather than fail the whole search
+    }
+  });
+  return files.flat();
 }
 
 function normalize(path: string) {
@@ -87,23 +102,13 @@ export function createSiteTools(site: Site) {
       }),
       execute: async ({ query, caseSensitive }) => {
         if (!query.trim()) return 'Provide a non-empty search string.';
-        const candidates = editableTree(site, await listTree(site))
-          .filter(t => SEARCHABLE.test(t.path) && t.size <= MAX_SEARCHABLE_BYTES)
-          .slice(0, MAX_SEARCHED_FILES);
-
         const needle = caseSensitive ? query : query.toLowerCase();
-        const results = await mapLimit(candidates, 8, async ({ path }) => {
-          let content: string;
-          try {
-            ({ content } = await readFile(site, path));
-          } catch {
-            return []; // unreadable blob — skip rather than fail the whole search
-          }
-          return content
+        const results = (await readTextFiles(site)).map(({ path, content }) =>
+          content
             .split('\n')
             .map((line, i) => ({ path, line: i + 1, text: line }))
-            .filter(m => (caseSensitive ? m.text : m.text.toLowerCase()).includes(needle));
-        });
+            .filter(m => (caseSensitive ? m.text : m.text.toLowerCase()).includes(needle)),
+        );
 
         const matches = results.flat();
         if (matches.length === 0) return `No matches for "${query}".`;

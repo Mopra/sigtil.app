@@ -58,6 +58,13 @@ export const t = {
   previewWidthFull: 'Fuld bredde',
   previewResize: 'Træk for at ændre bredden. Dobbeltklik for fuld bredde.',
 
+  // Editing text directly in the preview
+  inlineEdit: 'Ret tekst',
+  inlineEditTitle: 'Klik på en tekst i siden for at rette den',
+  inlineEditHint: 'Klik på en tekst for at rette den. Enter gemmer, Esc fortryder.',
+  inlineEditFailed: 'Teksten kunne ikke gemmes. Prøv igen, eller skriv ændringen i chatten.',
+  inlineEditHandOff: (from: string, to: string) => `Ret teksten “${from}” til “${to}” her på siden.`,
+
   // Pages
   pagePicker: 'Vælg side',
   pageMore: 'Flere muligheder for siden',

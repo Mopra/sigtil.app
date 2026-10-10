@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SignOutButton } from '@clerk/nextjs';
 import Chat, { type ChatPrefill } from './Chat';
 import PublishBar from './PublishBar';
+import { Mark } from './Logo';
+import { Icon, Menu, Spinner } from './ui';
 import { t } from '@/lib/strings';
 
 export type SiteStatus = {
@@ -28,7 +30,7 @@ export default function Editor({
 }) {
   const [status, setStatus] = useState<SiteStatus | null>(null);
   // Sticky: only ever advances to a newer build that is live. Swapping it for a
-  // building deployment — or clearing it when a status poll fails — would drop
+  // building deployment, or clearing it when a status poll fails would drop
   // the iframe onto a page that cannot be framed, blanking the preview.
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
@@ -36,6 +38,7 @@ export default function Editor({
   const [pages, setPages] = useState<PageLink[]>([]);
   const [page, setPage] = useState('/');
   const [prefill, setPrefill] = useState<ChatPrefill | null>(null);
+  const [view, setView] = useState<'chat' | 'preview'>('chat');
 
   const refreshPages = useCallback(async () => {
     try {
@@ -68,7 +71,7 @@ export default function Editor({
         setIframeKey(k => k + 1);
       }
     } catch {
-      // transient — next poll will recover
+      // transient, the next poll will recover
     }
   }, [siteId]);
 
@@ -85,7 +88,11 @@ export default function Editor({
 
   const pagePath = page === '/' ? '' : page;
   const currentLabel = pages.find(p => p.route === page)?.label ?? page;
-  const ask = (text: string) => setPrefill({ text, id: Date.now() });
+  const ask = (text: string) => {
+    setPrefill({ text, id: Date.now() });
+    setView('chat');
+  };
+  const host = productionUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
 
   const previewBuilding =
     (status?.preview && !status.preview.upToDate) ||
@@ -93,87 +100,156 @@ export default function Editor({
     status?.preview?.state === 'QUEUED';
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-stone-200 bg-white px-5 py-3">
-        <div>
-          {showSitesLink && (
-            <a href="/sites" className="text-sm text-stone-400 hover:underline">
-              ← {t.yourSites}
+    <div className="flex h-dvh flex-col">
+      <header className="flex h-16 shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          {showSitesLink ? (
+            <a
+              href="/sites"
+              title={t.yourSites}
+              aria-label={t.yourSites}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink-soft transition hover:bg-surface hover:text-ink"
+            >
+              <Icon name="back" size={20} />
             </a>
+          ) : (
+            <span className="ml-1 shrink-0">
+              <Mark size={28} />
+            </span>
           )}
-          <h1 className="text-lg font-bold leading-tight">{siteName}</h1>
+          <div className="min-w-0 pl-1">
+            <h1 className="truncate text-[17px] font-semibold leading-tight tracking-tight">{siteName}</h1>
+            <a
+              href={productionUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="block truncate text-[13px] text-ink-faint transition hover:text-accent"
+            >
+              {host}
+            </a>
+          </div>
         </div>
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-1">
           <PublishBar siteId={siteId} status={status} onChanged={onEdited} />
           <SignOutButton redirectUrl="/sign-in">
-            <button className="text-sm text-stone-500 hover:underline">{t.logout}</button>
+            <button
+              title={t.logout}
+              aria-label={t.logout}
+              className="flex h-10 w-10 items-center justify-center rounded-full text-ink-faint transition hover:bg-surface hover:text-ink"
+            >
+              <Icon name="logout" size={18} />
+            </button>
           </SignOutButton>
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="flex w-[420px] shrink-0 flex-col border-r border-stone-200 bg-white">
-          <Chat siteId={siteId} page={page} prefill={prefill} locked={status?.conflict ?? false} onEdited={onEdited} />
+      {/* Small screens show one pane at a time. */}
+      <div className="px-3 pb-2 md:hidden">
+        <div className="grid grid-cols-2 rounded-full bg-line/70 p-1 text-sm font-medium">
+          {(['chat', 'preview'] as const).map(v => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`rounded-full py-1.5 transition ${view === v ? 'bg-surface text-ink shadow-float' : 'text-ink-soft'}`}
+            >
+              {v === 'chat' ? t.chatTab : t.previewTab}
+            </button>
+          ))}
         </div>
+      </div>
 
-        <div className="relative flex-1 bg-stone-100">
-          <div className="flex items-center justify-between border-b border-stone-200 bg-stone-50 px-4 py-2 text-sm text-stone-500">
+      <div className="flex min-h-0 flex-1 gap-3 px-3 pb-3">
+        <section
+          className={`${view === 'chat' ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col overflow-hidden rounded-panel bg-surface shadow-float md:flex md:w-[400px] md:flex-none`}
+        >
+          <Chat siteId={siteId} page={page} prefill={prefill} locked={status?.conflict ?? false} onEdited={onEdited} />
+        </section>
+
+        <section
+          className={`${view === 'preview' ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col overflow-hidden rounded-panel bg-surface shadow-window md:flex`}
+        >
+          <div className="relative z-20 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-line px-3">
             {pages.length > 0 ? (
-              <span className="flex items-center gap-3">
-                <select
-                  value={page}
-                  onChange={e => setPage(e.target.value)}
-                  aria-label={t.pagePicker}
-                  className="rounded-lg border border-stone-300 bg-white px-2 py-1 text-stone-700 outline-none focus:border-accent"
+              <div className="flex min-w-0 items-center gap-1">
+                <div className="relative min-w-0">
+                  <select
+                    value={page}
+                    onChange={e => setPage(e.target.value)}
+                    aria-label={t.pagePicker}
+                    className="max-w-56 cursor-pointer appearance-none truncate rounded-full bg-canvas py-1.5 pl-3.5 pr-8 text-sm font-medium text-ink outline-none transition hover:bg-line/70"
+                  >
+                    {pages.map(p => (
+                      <option key={p.route} value={p.route}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                  <Icon
+                    name="chevronDown"
+                    size={14}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft"
+                  />
+                </div>
+                <button
+                  onClick={() => ask(t.pageNewPrompt)}
+                  title={t.pageNew}
+                  aria-label={t.pageNew}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-ink-soft transition hover:bg-canvas hover:text-accent"
                 >
-                  {pages.map(p => (
-                    <option key={p.route} value={p.route}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-                <button onClick={() => ask(t.pageNewPrompt)} className="hover:text-accent hover:underline">
-                  {t.pageNew}
+                  <Icon name="plus" size={18} />
                 </button>
-                <button onClick={() => ask(t.pageRenamePrompt(currentLabel))} className="hover:text-accent hover:underline">
-                  {t.pageRename}
-                </button>
-                {page !== '/' && (
-                  <button onClick={() => ask(t.pageDeletePrompt(currentLabel))} className="hover:text-red-600 hover:underline">
-                    {t.pageDelete}
-                  </button>
-                )}
-              </span>
+                <Menu
+                  label={t.pageMore}
+                  align="left"
+                  trigger={<Icon name="more" size={18} />}
+                  triggerClassName="flex h-8 w-8 items-center justify-center rounded-full text-ink-soft transition hover:bg-canvas hover:text-ink"
+                  items={[
+                    { label: t.pageNew, onSelect: () => ask(t.pageNewPrompt) },
+                    { label: t.pageRename, onSelect: () => ask(t.pageRenamePrompt(currentLabel)) },
+                    ...(page !== '/'
+                      ? [{ label: t.pageDelete, danger: true, onSelect: () => ask(t.pageDeletePrompt(currentLabel)) }]
+                      : []),
+                  ]}
+                />
+              </div>
             ) : (
-              <span>{t.previewTitle}</span>
+              <span className="px-1 text-sm text-ink-soft">{t.previewTitle}</span>
             )}
-            <span className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-1">
               {previewBuilding && (
-                <span className="flex items-center gap-2 text-accent">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+                <span className="flex items-center gap-2 rounded-full bg-accent-soft px-3 py-1 text-[13px] font-medium text-accent">
+                  <Spinner className="h-3 w-3" />
                   {t.previewUpdating}
                 </span>
               )}
               {previewUrl && (
-                <a href={previewUrl + pagePath} target="_blank" rel="noreferrer" className="hover:underline">
-                  {t.previewOpenNew}
+                <a
+                  href={previewUrl + pagePath}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={t.previewOpenNew}
+                  aria-label={t.previewOpenNew}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-ink-soft transition hover:bg-canvas hover:text-ink"
+                >
+                  <Icon name="external" size={16} />
                 </a>
               )}
-            </span>
+            </div>
           </div>
           {previewUrl ? (
             <iframe
               key={iframeKey}
               src={previewUrl + pagePath}
-              className="h-[calc(100%-37px)] w-full border-0 bg-white"
+              className="relative z-0 min-h-0 w-full flex-1 border-0 bg-white"
               title={t.previewTitle}
             />
           ) : (
-            <div className="flex h-full items-center justify-center p-8 text-center text-stone-400">
-              {t.previewNone}
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+              <Mark size={40} />
+              <p className="max-w-xs text-ink-soft">{t.previewNone}</p>
             </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );

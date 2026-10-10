@@ -8,41 +8,57 @@ export const t = {
 
   // Login
   logout: 'Log ud',
+  admin: 'Administration',
   noAccessTitle: 'Ingen adgang endnu',
   noAccessBody: 'Din konto er ikke inviteret til sigtil. Bed den der administrerer siden om at invitere din e-mail.',
 
   // Site picker
+  greeting: (name: string) => `Hej, ${name}`,
+  sitesIntro: 'Vælg den hjemmeside du vil arbejde på.',
+  noSites: 'Du har ikke adgang til nogen hjemmesider endnu.',
   yourSites: 'Dine hjemmesider',
   openEditor: 'Åbn',
 
   // Editor
+  chatTab: 'Chat',
+  previewTab: 'Visning',
   chatPlaceholder: 'Skriv hvad der skal ændres…',
-  chatEmpty: 'Fortæl mig hvad der skal ændres på siden — fx “Skift åbningstiderne til 12–22” eller “Sæt det nye billede ind øverst på forsiden”.',
-  thinking: 'Arbejder på det…',
+  chatHello: 'Hvad skal vi ændre?',
+  chatEmpty: 'Skriv det med dine egne ord. Du ser ændringen til højre, før den bliver udgivet.',
+  chatSuggestions: [
+    'Skift åbningstiderne til ',
+    'Ret teksten øverst på forsiden til ',
+    'Sæt et nyt billede ind på forsiden',
+    'Lav en ny side der hedder ',
+  ],
+  thinking: 'Arbejder på det',
   chatFailed: 'Det lykkedes ikke, og siden er uændret. Prøv igen.',
   conflict:
-    'Siden er blevet ændret et andet sted, og det støder sammen med dine ændringer, der ikke er udgivet endnu. Tryk “Fortryd alle ændringer” for at fortsætte fra den nyeste version.',
+    'Siden er blevet ændret et andet sted, og det støder sammen med dine ændringer, der ikke er udgivet endnu. Fortryd alle ændringer for at fortsætte fra den nyeste version.',
+  send: 'Send',
   attach: 'Vedhæft billede, video eller PDF',
+  dropHere: 'Slip filen her',
   uploading: 'Sender fil…',
   uploadFailed: 'Filen kunne ikke sendes. Prøv igen.',
   uploadTooLarge: (limitMb: number) => `Filen er for stor. Den må højst fylde ${limitMb} MB.`,
   uploadUnsupported: 'Den filtype kan ikke bruges. Send et billede, en video eller en PDF.',
-  // Full noun phrase incl. article — Danish genders differ ("et billede", "en video").
+  // Full noun phrase incl. article, since Danish genders differ ("et billede", "en video").
   uploadedLabel: { image: 'et billede', video: 'en video', pdf: 'en PDF' } as Record<string, string>,
   uploadedMessage: (label: string, ref: string) => `Jeg har uploadet ${label} (${ref}). `,
   uploadedWhere: 'Hvor vil du have den ind på siden? Sig til.',
 
   // Preview
   previewTitle: 'Sådan kommer siden til at se ud',
-  previewUpdating: 'Opdaterer visningen…',
+  previewUpdating: 'Opdaterer',
   previewOpenNew: 'Åbn i nyt vindue',
-  previewNone: 'Lav din første ændring, så dukker den op her.',
+  previewNone: 'Lav din første ændring, så dukker siden op her.',
 
   // Pages
   pagePicker: 'Vælg side',
-  pageNew: '+ Ny side',
-  pageRename: 'Omdøb',
-  pageDelete: 'Fjern',
+  pageMore: 'Flere muligheder for siden',
+  pageNew: 'Ny side',
+  pageRename: 'Omdøb siden',
+  pageDelete: 'Fjern siden',
   pageNewPrompt: 'Lav en ny side der hedder ',
   pageRenamePrompt: (label: string) => `Omdøb siden “${label}” til `,
   pageDeletePrompt: (label: string) => `Fjern siden “${label}”.`,
@@ -50,12 +66,15 @@ export const t = {
   // Publish
   publishButton: 'Udgiv',
   publishAllLive: 'Alt er udgivet',
-  publishPending: (n: number) => (n === 1 ? '1 ændring klar til udgivelse' : `${n} ændringer klar til udgivelse`),
-  publishWorking: 'Udgiver… det tager et øjeblik',
-  publishDone: 'Dine ændringer er nu live ✓',
-  publishFailed: 'Udgivelsen mislykkedes. Din side er uændret — prøv igen, eller fortryd ændringerne.',
+  publishPending: (n: number) => (n === 1 ? '1 ændring' : `${n} ændringer`),
+  publishPendingHint: 'klar til udgivelse',
+  publishWorking: 'Udgiver…',
+  publishDone: 'Dine ændringer er nu live',
+  publishFailed: 'Udgivelsen mislykkedes. Din side er uændret. Prøv igen, eller fortryd ændringerne.',
+  undoMenu: 'Fortryd',
   undo: 'Fortryd seneste ændring',
   undoAll: 'Fortryd alle ændringer',
+  undoAllConfirm: 'Tryk igen for at fortryde alt',
   undoDone: 'Ændringen er fortrudt.',
   undoNothing: 'Der er ikke noget at fortryde.',
 } as const;

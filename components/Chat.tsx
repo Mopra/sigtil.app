@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { t } from '@/lib/strings';
+import { Icon, Spinner } from './ui';
 
 export type ChatPrefill = { text: string; id: number };
 
@@ -27,6 +28,7 @@ export default function Chat({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -39,22 +41,38 @@ export default function Chat({
   });
 
   const busy = status === 'submitted' || status === 'streaming';
+  const lastIsAssistantText =
+    messages.at(-1)?.role === 'assistant' && messages.at(-1)!.parts.some(p => p.type === 'text' && p.text);
+
+  // Grow the input with its text, up to the max height set in CSS.
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
 
   useEffect(() => {
-    if (!prefill) return;
-    setInput(prefill.text);
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages, busy]);
+
+  function fill(text: string) {
+    setInput(text);
     const el = inputRef.current;
     if (!el) return;
     el.focus();
     // Wait for the value to land, then put the cursor after it.
     requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
+  }
+
+  useEffect(() => {
+    if (prefill) fill(prefill.text);
   }, [prefill]);
 
   function submit(text: string) {
     if (!text.trim() || locked) return;
     sendMessage({ text, metadata: { page } });
     setInput('');
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
   }
 
   async function handleFile(file: File) {
@@ -82,39 +100,93 @@ export default function Chat({
     }
   }
 
+  const canAttach = !busy && !uploading && !locked;
+
   return (
-    <>
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+    <div
+      className="relative flex min-h-0 flex-1 flex-col"
+      onDragOver={e => {
+        if (!canAttach || !e.dataTransfer.types.includes('Files')) return;
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={e => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);
+      }}
+      onDrop={e => {
+        e.preventDefault();
+        setDragging(false);
+        const f = e.dataTransfer.files?.[0];
+        if (f && canAttach) handleFile(f);
+      }}
+    >
+      {dragging && (
+        <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-[1.25rem] border-2 border-dashed border-accent bg-accent-soft/90 text-lg font-medium text-accent">
+          {t.dropHere}
+        </div>
+      )}
+
+      <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-4 pt-6">
         {messages.length === 0 && (
-          <p className="rounded-2xl bg-accent-soft p-4 text-[15px] leading-relaxed text-stone-700">
-            {t.chatEmpty}
-          </p>
-        )}
-        {messages.map(message => (
-          <div key={message.id} className={message.role === 'user' ? 'flex justify-end' : ''}>
-            <div
-              className={
-                message.role === 'user'
-                  ? 'max-w-[85%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-[15px] text-white'
-                  : 'max-w-[95%] text-[15px] leading-relaxed text-stone-800'
-              }
-            >
-              {message.parts.map((part, i) =>
-                part.type === 'text' ? <span key={i}>{part.text}</span> : null,
-              )}
+          <div className="animate-rise pt-4">
+            <h2 className="text-[26px] font-semibold leading-tight tracking-tight">{t.chatHello}</h2>
+            <p className="mt-2 text-[15px] leading-relaxed text-ink-soft">{t.chatEmpty}</p>
+            <div className="mt-6 flex flex-col items-start gap-2">
+              {t.chatSuggestions.map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={locked}
+                  onClick={() => fill(s)}
+                  className="rounded-full border border-line px-4 py-2 text-left text-[15px] text-ink transition hover:border-accent/40 hover:bg-accent-soft hover:text-accent disabled:opacity-40"
+                >
+                  {s.endsWith(' ') ? `${s.trim()}…` : s}
+                </button>
+              ))}
             </div>
           </div>
-        ))}
-        {busy && <p className="text-sm text-stone-400">{t.thinking}</p>}
-        {error && !busy && <p className="text-sm text-red-600">{t.chatFailed}</p>}
-        {locked && <p className="rounded-2xl bg-red-50 p-4 text-[15px] leading-relaxed text-red-800">{t.conflict}</p>}
-        {uploading && <p className="text-sm text-stone-400">{t.uploading}</p>}
-        {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
+        )}
+
+        {messages.map(message => {
+          const text = message.parts.map(part => (part.type === 'text' ? part.text : '')).join('');
+          if (!text) return null;
+          return message.role === 'user' ? (
+            <div key={message.id} className="flex animate-rise justify-end">
+              <div className="max-w-[85%] whitespace-pre-wrap rounded-[1.25rem] rounded-br-md bg-accent px-4 py-2.5 text-[15px] leading-snug text-white">
+                {text}
+              </div>
+            </div>
+          ) : (
+            <div key={message.id} className="max-w-[95%] whitespace-pre-wrap text-[15px] leading-relaxed text-ink">
+              {text}
+            </div>
+          );
+        })}
+
+        {busy && !lastIsAssistantText && (
+          <div className="flex items-center gap-2.5 text-sm text-ink-faint" role="status">
+            <span className="dots flex items-center gap-1 text-accent">
+              <span />
+              <span />
+              <span />
+            </span>
+            {t.thinking}
+          </div>
+        )}
+        {error && !busy && <Notice tone="danger">{t.chatFailed}</Notice>}
+        {locked && <Notice tone="danger">{t.conflict}</Notice>}
+        {uploading && (
+          <div className="flex items-center gap-2 text-sm text-ink-faint">
+            <Spinner className="text-accent" />
+            {t.uploading}
+          </div>
+        )}
+        {uploadError && <Notice tone="danger">{uploadError}</Notice>}
         <div ref={bottomRef} />
       </div>
 
       <form
-        className="flex items-end gap-2 border-t border-stone-200 p-3"
+        className="p-3 pt-0"
         onSubmit={e => {
           e.preventDefault();
           submit(input);
@@ -130,40 +202,55 @@ export default function Chat({
             if (f) handleFile(f);
           }}
         />
-        <button
-          type="button"
-          title={t.attach}
-          aria-label={t.attach}
-          disabled={busy || uploading || locked}
-          onClick={() => fileRef.current?.click()}
-          className="rounded-xl border border-stone-300 p-2.5 text-stone-500 hover:border-accent hover:text-accent disabled:opacity-40"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-          </svg>
-        </button>
-        <textarea
-          ref={inputRef}
-          rows={1}
-          value={input}
-          placeholder={t.chatPlaceholder}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              submit(input);
-            }
-          }}
-          className="max-h-40 flex-1 resize-none rounded-xl border border-stone-300 px-4 py-2.5 text-[15px] outline-none focus:border-accent"
-        />
-        <button
-          type="submit"
-          disabled={busy || locked || !input.trim()}
-          className="rounded-xl bg-accent px-4 py-2.5 font-semibold text-white disabled:opacity-40"
-        >
-          →
-        </button>
+        <div className="flex items-end gap-1 rounded-[1.5rem] border border-line bg-surface p-1.5 transition focus-within:border-accent/50 focus-within:ring-4 focus-within:ring-accent-soft">
+          <button
+            type="button"
+            title={t.attach}
+            aria-label={t.attach}
+            disabled={!canAttach}
+            onClick={() => fileRef.current?.click()}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition hover:bg-canvas hover:text-accent disabled:opacity-40"
+          >
+            <Icon name="paperclip" size={19} />
+          </button>
+          <textarea
+            ref={inputRef}
+            rows={1}
+            value={input}
+            placeholder={t.chatPlaceholder}
+            disabled={locked}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submit(input);
+              }
+            }}
+            className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1 py-[7px] text-[15px] leading-[22px] outline-none placeholder:text-ink-faint focus-visible:outline-none"
+          />
+          <button
+            type="submit"
+            title={t.send}
+            aria-label={t.send}
+            disabled={busy || locked || !input.trim()}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-white transition hover:bg-accent-hover active:scale-90 disabled:bg-line disabled:text-ink-faint"
+          >
+            <Icon name="arrowUp" size={18} />
+          </button>
+        </div>
       </form>
-    </>
+    </div>
+  );
+}
+
+function Notice({ tone, children }: { tone: 'danger'; children: React.ReactNode }) {
+  return (
+    <div
+      role="alert"
+      className={`flex gap-3 rounded-2xl p-4 text-[15px] leading-relaxed ${tone === 'danger' ? 'bg-danger-soft text-danger' : ''}`}
+    >
+      <Icon name="warning" size={18} className="mt-0.5 shrink-0" />
+      <span>{children}</span>
+    </div>
   );
 }

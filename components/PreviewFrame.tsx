@@ -140,7 +140,9 @@ export default function PreviewFrame({
     >
       {(constrained || dragging) && handle('left')}
       <div
-        className={`relative min-h-0 ${constrained || dragging ? 'my-3 overflow-hidden rounded-2xl shadow-window' : 'flex-1'}`}
+        className={`relative min-h-0 ${shown === null ? 'flex-1' : ''} ${
+          constrained || dragging ? 'my-3 overflow-hidden rounded-2xl shadow-window' : ''
+        }`}
         style={shown !== null ? { width: shown } : undefined}
       >
         <iframe

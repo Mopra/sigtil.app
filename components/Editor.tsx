@@ -13,8 +13,13 @@ import { t } from '@/lib/strings';
 /** The newest change did not build. `turn` is the chat turn it most likely came from. */
 export type BuildFailure = { sha: string; deploymentId: string; turn: string | null; repaired: boolean };
 
+/** One line of the what-changed list: a chat turn or another single change. */
+export type PendingChange = { labels: string[]; shas: string[] };
+
 export type SiteStatus = {
   pendingChanges: number;
+  changes: PendingChange[];
+  head: string | null;
   preview: { state: string; url: string | null; upToDate: boolean; failed?: BuildFailure | null } | null;
   productionUrl: string;
 };

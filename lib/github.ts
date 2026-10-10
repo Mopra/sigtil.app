@@ -524,17 +524,53 @@ export async function undoLastCommit(site: Site): Promise<boolean> {
  * something new happened that the caller has not seen.
  */
 export async function dropTurn(site: Site, turnId: string | null, headSha: string): Promise<boolean> {
+  return dropCommits(site, (c, last) => (turnId === null ? last : turnOf(c.message)?.id === turnId), headSha);
+}
+
+/** Take one item of the what-changed list out again, like dropTurn. */
+export async function dropChange(site: Site, shas: string[], headSha: string): Promise<boolean> {
+  const set = new Set(shas);
+  return dropCommits(site, c => set.has(c.sha), headSha);
+}
+
+async function dropCommits(site: Site, dropped: (c: Commit, last: boolean) => boolean, headSha: string): Promise<boolean> {
   return withBranchLock(site, async () => {
     const { cmp, pending } = await compareWork(site);
     if (pending.length === 0 || pending[pending.length - 1].sha !== headSha) return false;
     const commits = cmp.commits as any[];
-    const dropped = (c: any, i: number) =>
-      turnId === null ? i === commits.length - 1 : turnOf(c.commit.message)?.id === turnId;
-    const first = commits.findIndex(dropped);
+    const drop = (i: number) => dropped(pending[i], i === commits.length - 1);
+    const first = commits.findIndex((_, i) => drop(i));
     if (first === -1 || !commits[first].parents[0]) return false;
-    const kept = commits.slice(first).filter((c, i) => !dropped(c, first + i));
+    const kept = commits.slice(first).filter((_, i) => !drop(first + i));
     const tipSha = await replayCommits(site, kept, commits[first].parents[0].sha);
     await gh(site, refPath(site.workBranch), { method: 'PATCH', body: JSON.stringify({ sha: tipSha, force: true }) });
     return true;
   });
+}
+
+/** One line of the what-changed list shown before publishing. */
+export type Change = { labels: string[]; shas: string[] };
+
+/**
+ * The unpublished changes as the editor thinks of them: one item per chat
+ * turn (however many steps it took), and one per other change, oldest first.
+ * The labels are the short Danish summaries the commits were made with.
+ */
+export function changesOf(pending: Commit[]): Change[] {
+  const changes: Change[] = [];
+  const byTurn = new Map<string, Change>();
+  for (const c of pending) {
+    const turn = turnOf(c.message);
+    let change = turn ? byTurn.get(turn.id) : undefined;
+    if (!change) {
+      change = { labels: [], shas: [] };
+      changes.push(change);
+      if (turn) byTurn.set(turn.id, change);
+    }
+    change.shas.push(c.sha);
+    // A repair only fixes the turn's own mistake; it is not news to the editor.
+    const label = c.message.split('\n')[0].replace(/^sigtil:\s*/, '').trim();
+    if (!turn?.repair && label && !change.labels.includes(label)) change.labels.push(label);
+  }
+  return changes;
 }

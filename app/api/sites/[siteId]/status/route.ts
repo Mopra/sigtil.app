@@ -1,5 +1,5 @@
 import { getUser, workspaceForUser } from '@/lib/auth';
-import { syncWorkBranch, turnOf } from '@/lib/github';
+import { changesOf, syncWorkBranch, turnOf } from '@/lib/github';
 import { latestDeploymentForBranch } from '@/lib/vercel';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ siteId: string }> }) {
@@ -40,6 +40,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
 
   return Response.json({
     pendingChanges: pending.length,
+    // What publishing would put live, for the list by the Udgiv button.
+    changes: changesOf(pending),
+    head: head?.sha ?? null,
     preview: {
       state: preview?.state ?? 'READY',
       // Nothing unpublished: the live site IS the latest version, so show it.

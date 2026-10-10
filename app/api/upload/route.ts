@@ -48,7 +48,7 @@ export async function POST(req: Request) {
       .webp({ quality: 82 })
       .toBuffer();
     const path = `public/uploads/${stamp}-${slug}.webp`;
-    await writeFile(site, path, optimized, `sigtil: upload ${slug}.webp`);
+    await writeFile(site, path, optimized, `sigtil: Tilføjede billedet ${slug}`);
     return Response.json({ kind: 'image', ref: `/uploads/${stamp}-${slug}.webp` });
   }
 
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
       return Response.json({ error: 'too-large', limitMb: MAX_DOC_BYTES / 1024 / 1024 }, { status: 413 });
     }
     const path = `public/uploads/${stamp}-${slug}.pdf`;
-    await writeFile(site, path, Buffer.from(await file.arrayBuffer()), `sigtil: upload ${slug}.pdf`);
+    await writeFile(site, path, Buffer.from(await file.arrayBuffer()), `sigtil: Tilføjede PDF'en ${slug}`);
     return Response.json({ kind: 'pdf', ref: `/uploads/${stamp}-${slug}.pdf` });
   }
 

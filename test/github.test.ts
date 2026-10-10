@@ -6,7 +6,7 @@ import { resetLocks } from './fake-db';
 vi.mock('@/lib/db', () => import('./fake-db'));
 
 const {
-  dropTurn, ensureWorkBranch, publishWork, turnOf, withTurn, syncWorkBranch, undoLastCommit, unpublishedCommits, updateFile, writeFile,
+  changesOf, dropChange, dropTurn, ensureWorkBranch, publishWork, turnOf, withTurn, syncWorkBranch, undoLastCommit, unpublishedCommits, updateFile, writeFile,
 } = await import('@/lib/github');
 
 const site = {
@@ -358,6 +358,52 @@ describe('taking out a chat turn that broke the preview', () => {
     push({ 'content/about.md': 'two\n' }, 'newer');
     const now = head();
     expect(await dropTurn(site, 'bad', seen)).toBe(false);
+    expect(head()).toBe(now);
+  });
+});
+
+describe('the what-changed list before publishing', () => {
+  const head = () => gh.refs.get(site.workBranch)!;
+  const push = (files: Record<string, string>, message: string) => gh.push(site.workBranch, files, message, 'main');
+
+  it('shows one line per chat turn, without its repair, and one per other change', async () => {
+    push({ 'content/about.md': 'about us\n' }, withTurn('sigtil: Opdaterede Om os', { id: 't1' }));
+    push({ 'content/new.md': 'new\n' }, withTurn('sigtil: Lavede siden Nyt', { id: 't1' }));
+    push({ 'content/home.md': 'title\nhej\nbody\nfooter\n' }, 'sigtil: Rettede teksten “intro” til “hej”');
+    push({ 'content/new.md': 'fixed\n' }, withTurn('sigtil: Rettede en fejl', { id: 't1', repair: true }));
+
+    const changes = changesOf(await unpublishedCommits(site));
+
+    expect(changes.map(c => c.labels)).toEqual([
+      ['Opdaterede Om os', 'Lavede siden Nyt'],
+      ['Rettede teksten “intro” til “hej”'],
+    ]);
+    expect(changes.map(c => c.shas.length)).toEqual([3, 1]);
+  });
+
+  it('undoes one item, keeping the changes before and after it', async () => {
+    push({ 'content/about.md': 'about us\n' }, withTurn('a', { id: 't1' }));
+    push({ 'content/new.md': 'new\n' }, withTurn('b', { id: 't2' }));
+    push({ 'content/home.md': 'title\nhej\nbody\nfooter\n' }, 'c');
+    const [, middle] = changesOf(await unpublishedCommits(site));
+
+    expect(await dropChange(site, middle.shas, head())).toBe(true);
+
+    expect(gh.log(site.workBranch, 'main').map(m => m.split('\n')[0])).toEqual(['a', 'c']);
+    const files = gh.files(site.workBranch);
+    expect(files['content/new.md']).toBeUndefined();
+    expect(files['content/about.md']).toBe('about us\n');
+    expect(files['content/home.md']).toBe('title\nhej\nbody\nfooter\n');
+  });
+
+  it('does nothing when the list shown is out of date', async () => {
+    push({ 'content/about.md': 'about us\n' }, 'a');
+    const shown = head();
+    const [first] = changesOf(await unpublishedCommits(site));
+    push({ 'content/about.md': 'newer\n' }, 'b');
+    const now = head();
+
+    expect(await dropChange(site, first.shas, shown)).toBe(false);
     expect(head()).toBe(now);
   });
 });

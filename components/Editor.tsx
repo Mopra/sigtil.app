@@ -90,8 +90,8 @@ export default function Editor({
 
   const pagePath = page === '/' ? '' : page;
   const currentLabel = pages.find(p => p.route === page)?.label ?? page;
-  const ask = (text: string) => {
-    setPrefill({ text, id: Date.now() });
+  const ask = (text: string, hint: string) => {
+    setPrefill({ text, hint, id: Date.now() });
     setView('chat');
   };
   const host = productionUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -193,7 +193,7 @@ export default function Editor({
                   />
                 </div>
                 <button
-                  onClick={() => ask(t.pageNewPrompt)}
+                  onClick={() => ask(t.pageNewPrompt, t.pageNewHint)}
                   title={t.pageNew}
                   aria-label={t.pageNew}
                   className="flex h-8 w-8 items-center justify-center rounded-full text-ink-soft transition hover:bg-canvas hover:text-accent"
@@ -206,10 +206,19 @@ export default function Editor({
                   trigger={<Icon name="more" size={18} />}
                   triggerClassName="flex h-8 w-8 items-center justify-center rounded-full text-ink-soft transition hover:bg-canvas hover:text-ink"
                   items={[
-                    { label: t.pageNew, onSelect: () => ask(t.pageNewPrompt) },
-                    { label: t.pageRename, onSelect: () => ask(t.pageRenamePrompt(currentLabel)) },
+                    { label: t.pageNew, onSelect: () => ask(t.pageNewPrompt, t.pageNewHint) },
+                    {
+                      label: t.pageRename,
+                      onSelect: () => ask(t.pageRenamePrompt(currentLabel), t.pageRenameHint),
+                    },
                     ...(page !== '/'
-                      ? [{ label: t.pageDelete, danger: true, onSelect: () => ask(t.pageDeletePrompt(currentLabel)) }]
+                      ? [
+                          {
+                            label: t.pageDelete,
+                            danger: true,
+                            onSelect: () => ask(t.pageDeletePrompt(currentLabel), t.pageDeleteHint),
+                          },
+                        ]
                       : []),
                   ]}
                 />

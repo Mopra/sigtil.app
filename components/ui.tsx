@@ -8,6 +8,7 @@ const paths = {
   back: 'm15 18-6-6 6-6',
   check: 'M20 6 9 17l-5-5',
   chevronDown: 'm6 9 6 6 6-6',
+  close: 'M18 6 6 18M6 6l12 12',
   external: 'M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
   monitor: 'M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM8 20h8M12 16v4',

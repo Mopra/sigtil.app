@@ -6,7 +6,8 @@ import { DefaultChatTransport } from 'ai';
 import { t } from '@/lib/strings';
 import { Icon, Spinner } from './ui';
 
-export type ChatPrefill = { text: string; id: number };
+/** `hint` tells the editor what to do with the filled-in text, shown above the input. */
+export type ChatPrefill = { text: string; hint?: string; id: number };
 
 export default function Chat({
   siteId,
@@ -26,9 +27,11 @@ export default function Chat({
 }) {
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [hint, setHint] = useState<{ text: string; id: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -66,13 +69,22 @@ export default function Chat({
   }
 
   useEffect(() => {
-    if (prefill) fill(prefill.text);
+    if (!prefill) return;
+    fill(prefill.text);
+    setHint(prefill.hint ? { text: prefill.hint, id: prefill.id } : null);
+    // Pulse the input so the eye lands on it, restarting if it is already pulsing.
+    const box = boxRef.current;
+    if (!box) return;
+    box.classList.remove('animate-beckon');
+    void box.offsetWidth;
+    box.classList.add('animate-beckon');
   }, [prefill]);
 
   function submit(text: string) {
     if (!text.trim() || locked) return;
     sendMessage({ text, metadata: { page } });
     setInput('');
+    setHint(null);
   }
 
   async function handleFile(file: File) {
@@ -202,7 +214,28 @@ export default function Chat({
             if (f) handleFile(f);
           }}
         />
-        <div className="flex items-end gap-1 rounded-[1.5rem] border border-line bg-surface p-1.5 transition focus-within:border-accent/50 focus-within:ring-4 focus-within:ring-accent-soft">
+        {hint && (
+          <div
+            key={hint.id}
+            role="status"
+            className="mb-2 flex animate-rise items-center gap-2 rounded-2xl bg-accent-soft py-2 pl-3.5 pr-1.5 text-[14px] font-medium leading-snug text-accent"
+          >
+            <span className="flex-1">{hint.text}</span>
+            <button
+              type="button"
+              title={t.hintDismiss}
+              aria-label={t.hintDismiss}
+              onClick={() => setHint(null)}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition hover:bg-accent/10"
+            >
+              <Icon name="close" size={15} />
+            </button>
+          </div>
+        )}
+        <div
+          ref={boxRef}
+          className="flex items-end gap-1 rounded-[1.5rem] border border-line bg-surface p-1.5 transition focus-within:border-accent/50 focus-within:ring-4 focus-within:ring-accent-soft"
+        >
           <button
             type="button"
             title={t.attach}

@@ -67,6 +67,11 @@ export const t = {
   pageNewPrompt: 'Lav en ny side der hedder ',
   pageRenamePrompt: (label: string) => `Omdøb siden “${label}” til `,
   pageDeletePrompt: (label: string) => `Fjern siden “${label}”.`,
+  // Shown above the chat input once a page button has filled it in.
+  pageNewHint: 'Skriv navnet på den nye side her, og tryk Enter.',
+  pageRenameHint: 'Skriv det nye navn her, og tryk Enter.',
+  pageDeleteHint: 'Tryk Enter for at fjerne siden.',
+  hintDismiss: 'Luk',
 
   // Publish
   publishButton: 'Udgiv',

@@ -27,6 +27,17 @@ const model = openrouter(process.env.SIGTIL_MODEL ?? 'anthropic/claude-sonnet-5'
   usage: { include: true },
 });
 
+/**
+ * Tell the agent which page the editor had open when they wrote, so "denne
+ * side" resolves. Rebuilt from metadata on every request, so the history stays
+ * byte-identical between turns and the prompt cache keeps hitting.
+ */
+function withPageNote(message: UIMessage): UIMessage {
+  const page = (message.metadata as { page?: unknown } | undefined)?.page;
+  if (message.role !== 'user' || typeof page !== 'string' || !page.startsWith('/')) return message;
+  return { ...message, parts: [{ type: 'text', text: `[Brugeren ser på siden ${page.slice(0, 200)}]` }, ...message.parts] };
+}
+
 export async function POST(req: Request) {
   const user = await getUser();
   if (!user) return new Response('Unauthorized', { status: 401 });
@@ -38,7 +49,7 @@ export async function POST(req: Request) {
   const result = streamText({
     model,
     system: systemPrompt(site),
-    messages: await convertToModelMessages(messages),
+    messages: await convertToModelMessages(messages.map(withPageNote)),
     tools: createSiteTools(site),
     stopWhen: isStepCount(15),
     onFinish({ providerMetadata }) {

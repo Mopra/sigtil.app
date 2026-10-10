@@ -35,6 +35,15 @@ export const t = {
   previewOpenNew: 'Åbn i nyt vindue',
   previewNone: 'Lav din første ændring, så dukker den op her.',
 
+  // Pages
+  pagePicker: 'Vælg side',
+  pageNew: '+ Ny side',
+  pageRename: 'Omdøb',
+  pageDelete: 'Fjern',
+  pageNewPrompt: 'Lav en ny side der hedder ',
+  pageRenamePrompt: (label: string) => `Omdøb siden “${label}” til `,
+  pageDeletePrompt: (label: string) => `Fjern siden “${label}”.`,
+
   // Publish
   publishButton: 'Udgiv',
   publishAllLive: 'Alt er udgivet',

@@ -1,7 +1,8 @@
 import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
 import type { Site } from '@/lib/db';
-import { listTree, readFile, writeFile } from '@/lib/github';
+import { commitTreeChanges, listTree, readFile, writeFile, type TreeEntry } from '@/lib/github';
+import { pagesFromFiles } from '@/lib/pages';
 
 const ALWAYS_BLOCKED = [
   'package.json',
@@ -45,6 +46,21 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
     out.push(...(await Promise.all(items.slice(i, i + limit).map(fn))));
   }
   return out;
+}
+
+function normalize(path: string) {
+  return path.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+}
+
+/** Files at `path`, or under it when it names a folder. */
+function filesAt(tree: TreeEntry[], path: string) {
+  const p = normalize(path);
+  return tree.filter(t => t.path === p || t.path.startsWith(p + '/'));
+}
+
+/** The file(s) rendering the front page; deleting those would leave the site without a home. */
+function isFrontPage(path: string) {
+  return pagesFromFiles([path]).some(p => p.route === '/');
 }
 
 export function createSiteTools(site: Site) {
@@ -97,6 +113,19 @@ export function createSiteTools(site: Site) {
           lines.push(`[${matches.length - shown.length} more matches — narrow the search]`);
         }
         return lines.join('\n');
+      },
+    }),
+
+    listPages: tool({
+      description:
+        'List the pages of the website: each URL with the file that renders it. Use this first for anything about whole pages (adding, renaming, removing, or "the page about X"). Placeholder segments like [slug] mean one file renders many pages.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const pages = pagesFromFiles((await listTree(site)).map(t => t.path));
+        if (pages.length === 0) return '(no pages found, look at the files instead)';
+        return pages
+          .map(p => `${p.route}  →  ${p.file}${isEditable(site, p.file) ? '' : '  (not editable)'}`)
+          .join('\n');
       },
     }),
 
@@ -162,6 +191,60 @@ export function createSiteTools(site: Site) {
         }
         await writeFile(site, path, content, `sigtil: ${summary}`);
         return `Created ${path}.`;
+      },
+    }),
+
+    moveFiles: tool({
+      description:
+        'Move or rename files or whole folders, all in one saved step. Use it to rename a page (e.g. move folder "app/om-os" to "app/kontakt" changes its URL). Afterwards, update every link that pointed to the old URL.',
+      inputSchema: z.object({
+        moves: z.array(z.object({
+          from: z.string().describe('Existing file or folder path'),
+          to: z.string().describe('New file or folder path'),
+        })).min(1),
+        summary: z.string().describe('Very short description in Danish, e.g. "Omdøbte siden Om os til Kontakt"'),
+      }),
+      execute: async ({ moves, summary }) => {
+        const tree = await listTree(site);
+        const existing = new Set(tree.map(t => t.path));
+        const changes = [];
+        for (const { from, to } of moves) {
+          const src = normalize(from);
+          const dest = normalize(to);
+          const files = filesAt(tree, src);
+          if (files.length === 0) return `Nothing found at ${from}.`;
+          for (const f of files) {
+            const target = dest + f.path.slice(src.length);
+            if (!isEditable(site, f.path) || !isEditable(site, target)) {
+              return `Refused: moving ${f.path} to ${target} is outside the editable content of this site.`;
+            }
+            if (existing.has(target)) return `Refused: ${target} already exists.`;
+            if (isFrontPage(f.path)) return 'Refused: the front page cannot be moved.';
+            changes.push({ path: target, mode: f.mode, sha: f.sha }, { path: f.path, mode: f.mode, sha: null });
+          }
+        }
+        await commitTreeChanges(site, changes, `sigtil: ${summary}`);
+        return `Moved ${changes.length / 2} file(s). Now update links to the old location.`;
+      },
+    }),
+
+    deleteFiles: tool({
+      description:
+        'Delete files or whole folders, all in one saved step. Use it to remove a page (delete its folder or file). Only after the user has confirmed, and remove links to the page first.',
+      inputSchema: z.object({
+        paths: z.array(z.string()).min(1).describe('Files or folders to delete'),
+        summary: z.string().describe('Very short description in Danish, e.g. "Fjernede siden Nyheder"'),
+      }),
+      execute: async ({ paths, summary }) => {
+        const tree = await listTree(site);
+        const files = [...new Set(paths.flatMap(p => filesAt(tree, p)))];
+        if (files.length === 0) return `Nothing found at ${paths.join(', ')}.`;
+        for (const f of files) {
+          if (!isEditable(site, f.path)) return `Refused: ${f.path} is not an editable file on this site.`;
+          if (isFrontPage(f.path)) return 'Refused: the front page cannot be deleted.';
+        }
+        await commitTreeChanges(site, files.map(f => ({ path: f.path, mode: f.mode, sha: null })), `sigtil: ${summary}`);
+        return `Deleted ${files.length} file(s).`;
       },
     }),
   } satisfies ToolSet;

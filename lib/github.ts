@@ -50,15 +50,43 @@ export async function ensureWorkBranch(site: Site): Promise<string> {
   return base;
 }
 
-export type TreeEntry = { path: string; size: number };
+export type TreeEntry = { path: string; size: number; sha: string; mode: string };
 
 /** Recursive listing of the working branch, with blob sizes. One API call. */
 export async function listTree(site: Site): Promise<TreeEntry[]> {
   const sha = await ensureWorkBranch(site);
   const tree = await gh(site, `/git/trees/${sha}?recursive=1`);
-  return (tree.tree as Array<{ path: string; type: string; size?: number }>)
+  return (tree.tree as Array<{ path: string; type: string; size?: number; sha: string; mode: string }>)
     .filter(t => t.type === 'blob')
-    .map(t => ({ path: t.path, size: t.size ?? 0 }));
+    .map(t => ({ path: t.path, size: t.size ?? 0, sha: t.sha, mode: t.mode }));
+}
+
+/** A tree entry change: point `path` at an existing blob, or delete it (`sha: null`). */
+export type TreeChange = { path: string; mode: string; sha: string | null };
+
+/**
+ * Apply several file changes to the working branch as ONE commit, so a page
+ * rename or deletion is a single step for "Fortryd seneste ændring".
+ */
+export async function commitTreeChanges(site: Site, changes: TreeChange[], message: string) {
+  const head = await ensureWorkBranch(site);
+  const commit = await gh(site, `/git/commits/${head}`);
+  const tree = await gh(site, '/git/trees', {
+    method: 'POST',
+    body: JSON.stringify({
+      base_tree: commit.tree.sha,
+      tree: changes.map(c => ({ path: c.path, mode: c.mode, type: 'blob', sha: c.sha })),
+    }),
+  });
+  const next = await gh(site, '/git/commits', {
+    method: 'POST',
+    body: JSON.stringify({ message, tree: tree.sha, parents: [head] }),
+  });
+  // Not forced: if another edit landed meanwhile, fail rather than drop it.
+  await gh(site, `/git/refs/${encodeURIComponent(`heads/${site.workBranch}`)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ sha: next.sha }),
+  });
 }
 
 /** Recursive file listing of the working branch. */

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SignOutButton } from '@clerk/nextjs';
-import Chat from './Chat';
+import Chat, { type ChatPrefill } from './Chat';
 import PublishBar from './PublishBar';
 import { t } from '@/lib/strings';
 
@@ -11,6 +11,8 @@ export type SiteStatus = {
   preview: { state: string; url: string | null; upToDate: boolean } | null;
   productionUrl: string;
 };
+
+type PageLink = { route: string; label: string };
 
 export default function Editor({
   siteId,
@@ -30,6 +32,26 @@ export default function Editor({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
   const lastReadyUrl = useRef<string | null>(null);
+  const [pages, setPages] = useState<PageLink[]>([]);
+  const [page, setPage] = useState('/');
+  const [prefill, setPrefill] = useState<ChatPrefill | null>(null);
+
+  const refreshPages = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/sites/${siteId}/pages`);
+      if (!res.ok) return;
+      const next: { pages: PageLink[] } = await res.json();
+      setPages(next.pages);
+      // The open page was removed or renamed: fall back to the front page.
+      setPage(current => (next.pages.some(p => p.route === current) ? current : '/'));
+    } catch {
+      // keep the last list
+    }
+  }, [siteId]);
+
+  useEffect(() => {
+    refreshPages();
+  }, [refreshPages]);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -55,6 +77,15 @@ export default function Editor({
     return () => clearInterval(id);
   }, [refreshStatus]);
 
+  const onEdited = useCallback(() => {
+    refreshStatus();
+    refreshPages();
+  }, [refreshStatus, refreshPages]);
+
+  const pagePath = page === '/' ? '' : page;
+  const currentLabel = pages.find(p => p.route === page)?.label ?? page;
+  const ask = (text: string) => setPrefill({ text, id: Date.now() });
+
   const previewBuilding =
     (status?.preview && !status.preview.upToDate) ||
     status?.preview?.state === 'BUILDING' ||
@@ -72,7 +103,7 @@ export default function Editor({
           <h1 className="text-lg font-bold leading-tight">{siteName}</h1>
         </div>
         <div className="flex items-center gap-5">
-          <PublishBar siteId={siteId} status={status} onChanged={refreshStatus} />
+          <PublishBar siteId={siteId} status={status} onChanged={onEdited} />
           <SignOutButton redirectUrl="/sign-in">
             <button className="text-sm text-stone-500 hover:underline">{t.logout}</button>
           </SignOutButton>
@@ -81,12 +112,40 @@ export default function Editor({
 
       <div className="flex min-h-0 flex-1">
         <div className="flex w-[420px] shrink-0 flex-col border-r border-stone-200 bg-white">
-          <Chat siteId={siteId} onEdited={refreshStatus} />
+          <Chat siteId={siteId} page={page} prefill={prefill} onEdited={onEdited} />
         </div>
 
         <div className="relative flex-1 bg-stone-100">
           <div className="flex items-center justify-between border-b border-stone-200 bg-stone-50 px-4 py-2 text-sm text-stone-500">
-            <span>{t.previewTitle}</span>
+            {pages.length > 0 ? (
+              <span className="flex items-center gap-3">
+                <select
+                  value={page}
+                  onChange={e => setPage(e.target.value)}
+                  aria-label={t.pagePicker}
+                  className="rounded-lg border border-stone-300 bg-white px-2 py-1 text-stone-700 outline-none focus:border-accent"
+                >
+                  {pages.map(p => (
+                    <option key={p.route} value={p.route}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={() => ask(t.pageNewPrompt)} className="hover:text-accent hover:underline">
+                  {t.pageNew}
+                </button>
+                <button onClick={() => ask(t.pageRenamePrompt(currentLabel))} className="hover:text-accent hover:underline">
+                  {t.pageRename}
+                </button>
+                {page !== '/' && (
+                  <button onClick={() => ask(t.pageDeletePrompt(currentLabel))} className="hover:text-red-600 hover:underline">
+                    {t.pageDelete}
+                  </button>
+                )}
+              </span>
+            ) : (
+              <span>{t.previewTitle}</span>
+            )}
             <span className="flex items-center gap-3">
               {previewBuilding && (
                 <span className="flex items-center gap-2 text-accent">
@@ -95,7 +154,7 @@ export default function Editor({
                 </span>
               )}
               {previewUrl && (
-                <a href={previewUrl} target="_blank" rel="noreferrer" className="hover:underline">
+                <a href={previewUrl + pagePath} target="_blank" rel="noreferrer" className="hover:underline">
                   {t.previewOpenNew}
                 </a>
               )}
@@ -104,7 +163,7 @@ export default function Editor({
           {previewUrl ? (
             <iframe
               key={iframeKey}
-              src={previewUrl}
+              src={previewUrl + pagePath}
               className="h-[calc(100%-37px)] w-full border-0 bg-white"
               title={t.previewTitle}
             />

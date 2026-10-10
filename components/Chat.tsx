@@ -1,12 +1,27 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { t } from '@/lib/strings';
 
-export default function Chat({ siteId, onEdited }: { siteId: string; onEdited: () => void }) {
+export type ChatPrefill = { text: string; id: number };
+
+export default function Chat({
+  siteId,
+  page,
+  prefill,
+  onEdited,
+}: {
+  siteId: string;
+  /** Page open in the preview, sent along so "denne side" means something. */
+  page: string;
+  /** Text to drop into the input for the editor to finish, e.g. from the page buttons. */
+  prefill: ChatPrefill | null;
+  onEdited: () => void;
+}) {
   const [input, setInput] = useState('');
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -22,9 +37,19 @@ export default function Chat({ siteId, onEdited }: { siteId: string; onEdited: (
 
   const busy = status === 'submitted' || status === 'streaming';
 
+  useEffect(() => {
+    if (!prefill) return;
+    setInput(prefill.text);
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    // Wait for the value to land, then put the cursor after it.
+    requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
+  }, [prefill]);
+
   function submit(text: string) {
     if (!text.trim()) return;
-    sendMessage({ text });
+    sendMessage({ text, metadata: { page } });
     setInput('');
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
   }
@@ -113,6 +138,7 @@ export default function Chat({ siteId, onEdited }: { siteId: string; onEdited: (
           </svg>
         </button>
         <textarea
+          ref={inputRef}
           rows={1}
           value={input}
           placeholder={t.chatPlaceholder}

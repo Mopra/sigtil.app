@@ -5,11 +5,13 @@ import { SignOutButton } from '@clerk/nextjs';
 import type { UIMessage } from 'ai';
 import Chat, { type ChatPrefill, type RepairRequest } from './Chat';
 import PublishBar from './PublishBar';
+import BudgetBar from './BudgetBar';
 import { Mark } from './Logo';
 import PreviewFrame, { WidthPresets, type FrameWidth } from './PreviewFrame';
 import { Icon, Menu, Spinner } from './ui';
 import { useInlineEdit } from './useInlineEdit';
 import { t } from '@/lib/strings';
+import type { Budget } from '@/lib/budget';
 
 /** The newest change did not build. `turn` is the chat turn it most likely came from. */
 export type BuildFailure = { sha: string; deploymentId: string; turn: string | null; repaired: boolean };
@@ -23,6 +25,7 @@ export type SiteStatus = {
   head: string | null;
   preview: { state: string; url: string | null; upToDate: boolean; failed?: BuildFailure | null } | null;
   productionUrl: string;
+  budget?: Budget | null;
 };
 
 type PageLink = { route: string; label: string };
@@ -262,6 +265,7 @@ export default function Editor({
         <section
           className={`${view === 'chat' ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col overflow-hidden rounded-panel bg-surface shadow-float md:flex md:w-[400px] md:flex-none`}
         >
+          {status?.budget && <BudgetBar budget={status.budget} />}
           <Chat
             siteId={siteId}
             initialMessages={initialChat}

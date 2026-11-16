@@ -1,6 +1,7 @@
 import { getUser, workspaceForUser } from '@/lib/auth';
 import { changesOf, syncWorkBranch, turnOf } from '@/lib/github';
 import { latestDeploymentForBranch } from '@/lib/vercel';
+import { budgetOf } from '@/lib/budget-store';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ siteId: string }> }) {
   const user = await getUser();
@@ -54,5 +55,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ siteId:
       failed,
     },
     productionUrl: site.productionUrl,
+    // Left out when it cannot be read: the bar is information, not worth failing the status for.
+    budget: await budgetOf(site).catch(() => null),
   });
 }

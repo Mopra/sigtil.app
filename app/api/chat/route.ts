@@ -17,6 +17,8 @@ import { repairPrompt, systemPrompt } from '@/lib/agent/system';
 import { buildLog } from '@/lib/vercel';
 import { forModel, textOnly } from '@/lib/chat';
 import { clearChat, loadChat, saveChat } from '@/lib/chat-store';
+import { isUsedUp } from '@/lib/budget';
+import { addSpend, budgetOf } from '@/lib/budget-store';
 
 export const maxDuration = 300;
 
@@ -75,6 +77,11 @@ function withRepair(message: UIMessage, log: string | null): UIMessage {
 
 const TURN_ID = /^[\w-]{1,64}$/;
 
+// What the editor's browser is told when the chat cannot answer, so it can
+// say why in plain words. Never the error itself, which may hold internals.
+const BUDGET_USED = 'sigtil:budget';
+const AI_UNAVAILABLE = 'sigtil:unavailable';
+
 export async function POST(req: Request) {
   const user = await getUser();
   if (!user) return new Response('Unauthorized', { status: 401 });
@@ -89,6 +96,9 @@ export async function POST(req: Request) {
   if (message?.role !== 'user' || !Array.isArray(message.parts) || typeof message.id !== 'string') {
     return new Response('Bad request', { status: 400 });
   }
+  // The month's budget is spent. A repair still runs: it mends a change the
+  // editor already paid for, and costs far less than leaving the site broken.
+  if (!repair && isUsedUp(await budgetOf(site))) return new Response(BUDGET_USED, { status: 402 });
 
   // Every change this turn makes is marked with it. A repair continues the
   // turn it repairs, so a failed repair takes both out together.
@@ -161,6 +171,7 @@ export async function POST(req: Request) {
       }
       // In the order they ran: "fast,strong" for a turn handed over.
       const which = [...new Set(ran)].join(',');
+      addSpend(site.id, cost).catch(e => console.error('[chat] spend', e));
       console.log(
         `[chat] site=${site.id} models=${which} steps=${steps.length} prompt=${prompt} cached=${cached} (${prompt ? Math.round((cached / prompt) * 100) : 0}%) completion=${completion} cost=$${cost.toFixed(4)}`,
       );
@@ -175,6 +186,12 @@ export async function POST(req: Request) {
       stream: result.stream,
       originalMessages: messages,
       generateMessageId: createIdGenerator({ prefix: 'msg', size: 16 }),
+      // The provider is out of credits or down: nothing the editor can retry away.
+      onError: e => {
+        console.error('[chat] stream', e);
+        const status = (e as { statusCode?: number } | null)?.statusCode;
+        return status === 402 || status === 401 || status === 403 ? AI_UNAVAILABLE : 'error';
+      },
       onEnd: ({ messages }) =>
         saveChat(site.id, user.id, messages).catch(e => console.error('[chat] save', e)),
     }),

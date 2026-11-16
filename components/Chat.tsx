@@ -249,7 +249,15 @@ export default function Chat({
             {t.thinking}
           </div>
         )}
-        {error && !busy && <Notice tone="danger">{t.chatFailed}</Notice>}
+        {error && !busy && (
+          <Notice tone="danger">
+            {error.message.includes('sigtil:budget')
+              ? t.chatBudgetUsed
+              : error.message.includes('sigtil:unavailable')
+                ? t.chatUnavailable
+                : t.chatFailed}
+          </Notice>
+        )}
         {shownNotice && !busy && <Notice tone="danger">{shownNotice}</Notice>}
         {uploading && (
           <div className="flex items-center gap-2 text-sm text-ink-faint">

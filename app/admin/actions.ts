@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { eq } from 'drizzle-orm';
 import { db, siteMembers, sites, users } from '@/lib/db';
 import { encryptSecret } from '@/lib/db/crypto';
 import { getUser } from '@/lib/auth';
@@ -24,6 +25,14 @@ export async function createSite(formData: FormData) {
     productionUrl: String(formData.get('productionUrl')).trim().replace(/\/$/, ''),
     siteNotes: String(formData.get('siteNotes') ?? ''),
   });
+  revalidatePath('/admin');
+}
+
+export async function setBudget(formData: FormData) {
+  await requireAdmin();
+  const kroner = Math.round(Number(formData.get('monthlyBudgetDkk')));
+  if (!Number.isFinite(kroner) || kroner < 0 || kroner > 100_000) return;
+  await db.update(sites).set({ monthlyBudgetDkk: kroner }).where(eq(sites.id, String(formData.get('siteId'))));
   revalidatePath('/admin');
 }
 

@@ -1,17 +1,21 @@
 import { redirect } from 'next/navigation';
-import { db, siteMembers, sites, users } from '@/lib/db';
+import { eq } from 'drizzle-orm';
+import { db, siteMembers, sites, usage, users } from '@/lib/db';
+import { USD_DKK, monthOf } from '@/lib/budget';
 import { getUser } from '@/lib/auth';
-import { addMember, createSite, createUser } from './actions';
+import { addMember, createSite, createUser, setBudget } from './actions';
 
 export default async function AdminPage() {
   const user = await getUser();
   if (!user || user.role !== 'admin') redirect('/sites');
 
-  const [allSites, allUsers, memberships] = await Promise.all([
+  const [allSites, allUsers, memberships, spend] = await Promise.all([
     db.select().from(sites),
     db.select().from(users),
     db.select().from(siteMembers),
+    db.select().from(usage).where(eq(usage.month, monthOf(new Date()))),
   ]);
+  const spentDkk = (siteId: string) => (spend.find(u => u.siteId === siteId)?.costUsd ?? 0) * USD_DKK;
 
   const input = 'w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[15px] outline-none transition focus:border-accent/50 focus:ring-4 focus:ring-accent-soft';
   const label = 'block text-[13px] font-medium text-ink-soft mt-4 mb-1.5';
@@ -116,6 +120,21 @@ export default async function AdminPage() {
                     .filter(Boolean)
                     .join(', ') || 'none'}
                 </span>
+                <form action={setBudget} className="mt-2 flex items-center gap-2 text-ink-soft">
+                  <input type="hidden" name="siteId" value={s.id} />
+                  <span>AI this month: {spentDkk(s.id).toFixed(2)} kr. of</span>
+                  <input
+                    name="monthlyBudgetDkk"
+                    type="number"
+                    min={0}
+                    step={1}
+                    defaultValue={s.monthlyBudgetDkk}
+                    aria-label="Monthly AI budget in kroner"
+                    className="w-20 rounded-lg border border-line bg-surface px-2 py-1 text-right outline-none focus:border-accent/50"
+                  />
+                  <span>kr.</span>
+                  <button className="rounded-full px-3 py-1 font-medium text-accent transition hover:bg-accent-soft">Save</button>
+                </form>
               </div>
             ))}
           </div>

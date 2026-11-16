@@ -167,7 +167,8 @@ export default function Editor({
     on: editText,
     onSaved: onEdited,
     onHandOff: (from, to) => {
-      setPrefill({ text: t.inlineEditHandOff(from, to), send: true, id: Date.now() });
+      const text = to ? t.inlineEditHandOff(from, to) : t.inlineDeleteHandOff(from);
+      setPrefill({ text, send: true, id: Date.now() });
       setView('chat');
     },
     onImageHandOff: (ref, alt) => {

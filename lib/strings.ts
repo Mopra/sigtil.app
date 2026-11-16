@@ -66,8 +66,10 @@ export const t = {
   // Editing text directly in the preview
   inlineEdit: 'Ret på siden',
   inlineEditTitle: 'Ret tekster og skift billeder direkte på siden',
-  inlineEditHint: 'Klik på en tekst for at rette den. Peg på et billede for at skifte det.',
+  inlineEditHint: 'Klik på en tekst for at rette eller fjerne den. Peg på et billede for at skifte det.',
   inlineEditFailed: 'Ændringen kunne ikke gemmes. Prøv igen, eller skriv den i chatten.',
+  inlineDeleteHandOff: (from: string) =>
+    `Fjern teksten “${from}” her på siden. Fjern den også i den anden sprogversion, hvis den findes der.`,
   inlineImageHandOff: (ref: string, alt: string) =>
     `Jeg har uploadet et billede (${ref}). Skift billedet${alt ? ` “${alt}”` : ''} her på siden ud med det.`,
   inlineEditHandOff: (from: string, to: string) => `Ret teksten “${from}” til “${to}” her på siden.`,

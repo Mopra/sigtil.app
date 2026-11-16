@@ -16,6 +16,17 @@
   // Never editable in place: interactive elements and things that are not text.
   var SKIP = 'a,button,select,option,input,textarea,label,script,style,noscript,svg,code,pre,[contenteditable="true"],[contenteditable="plaintext-only"]';
 
+  // Only the sigtil editor may switch editing on: the page that frames the
+  // site must come from where this script does (or from a developer's machine).
+  // Any other page framing the site gets no answer and no texts or pictures.
+  var home = '';
+  try {
+    home = new URL(document.currentScript.src).origin;
+  } catch (e) {}
+  function trusted(origin) {
+    return origin === home || /^http:\/\/localhost(:\d+)?$/.test(origin);
+  }
+
   var parentOrigin = null;
   var on = false;
   var hovered = null;
@@ -49,10 +60,37 @@
   picker.type = 'file';
   picker.accept = 'image/*';
   picker.style.display = 'none';
+  // Shown under a text while it is being edited.
+  var delButton = document.createElement('button');
+  delButton.type = 'button';
+  delButton.setAttribute('data-sigtil-ui', '');
+  delButton.textContent = 'Fjern teksten';
+  delButton.style.background = '#b42318';
   function mountUi() {
     document.body.appendChild(imgButton);
+    document.body.appendChild(delButton);
     document.body.appendChild(picker);
   }
+
+  function placeDelete() {
+    if (!editing) {
+      delButton.style.display = 'none';
+      return;
+    }
+    var r = editing.el.getBoundingClientRect();
+    delButton.style.display = 'inline-flex';
+    delButton.style.left = Math.max(8, r.left) + 'px';
+    delButton.style.top = Math.max(8, r.bottom + 8) + 'px';
+  }
+  // Pressing it must not take the cursor out of the text, which would save it first.
+  delButton.addEventListener('mousedown', function (e) {
+    e.preventDefault();
+  });
+  delButton.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    finishEdit(false, true);
+  });
   if (document.body) mountUi();
   else document.addEventListener('DOMContentLoaded', mountUi);
 
@@ -110,11 +148,16 @@
     el.addEventListener('keydown', onKey);
     el.addEventListener('blur', onBlur);
     el.addEventListener('paste', onPaste);
+    el.addEventListener('input', placeDelete);
+    placeDelete();
     send({ sigtil: 'editing', on: true });
   }
 
-  /** End the edit in progress; `save` sends the change, otherwise the old text is put back. */
-  function finishEdit(save) {
+  /**
+   * End the edit in progress; `save` sends the change, otherwise the old text
+   * is put back. `remove` asks the editor to take the text out of the page.
+   */
+  function finishEdit(save, remove) {
     if (!editing) return;
     var el = editing.el;
     var original = editing.original;
@@ -122,11 +165,29 @@
     el.removeEventListener('keydown', onKey);
     el.removeEventListener('blur', onBlur);
     el.removeEventListener('paste', onPaste);
+    el.removeEventListener('input', placeDelete);
     el.removeAttribute('contenteditable');
     el.removeAttribute('data-sigtil-editing');
+    placeDelete();
     var sel = window.getSelection();
     if (sel) sel.removeAllRanges();
     send({ sigtil: 'editing', on: false });
+
+    if (remove) {
+      // Gone from the page at once; it comes back if it could not be saved.
+      var shown = el.style.display;
+      el.textContent = original;
+      el.style.display = 'none';
+      var rid = 'e' + ++seq;
+      pending[rid] = {
+        el: el,
+        restore: function () {
+          el.style.display = shown;
+        },
+      };
+      send({ sigtil: 'edit', id: rid, oldText: norm(original), newText: '', path: location.pathname });
+      return;
+    }
 
     var oldText = norm(original);
     var newText = norm(el.textContent || '');
@@ -293,6 +354,7 @@
     'scroll',
     function () {
       showImageButton(null);
+      placeDelete();
     },
     true,
   );
@@ -302,7 +364,7 @@
   document.addEventListener(
     'click',
     function (e) {
-      if (!on || e.target === imgButton) return;
+      if (!on || e.target === imgButton || e.target === delButton) return;
       if (editing && editing.el.contains(e.target)) return;
       var el = editableFrom(e.target);
       if (el) {
@@ -319,7 +381,7 @@
   );
 
   window.addEventListener('message', function (e) {
-    if (e.source !== window.parent) return;
+    if (e.source !== window.parent || !trusted(e.origin)) return;
     var msg = e.data;
     if (!msg || typeof msg !== 'object' || typeof msg.sigtil !== 'string') return;
     parentOrigin = e.origin;

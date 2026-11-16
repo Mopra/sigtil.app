@@ -27,7 +27,9 @@ async function sendable(file: Blob): Promise<Blob> {
     canvas.height = Math.round(bitmap.height * scale);
     canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
-    const blob = await new Promise<Blob | null>(done => canvas.toBlob(done, 'image/jpeg', 0.9));
+    // JPEG has no see-through parts: a logo or cut-out would get a black background.
+    const type = /png|webp|gif/.test(file.type) ? 'image/webp' : 'image/jpeg';
+    const blob = await new Promise<Blob | null>(done => canvas.toBlob(done, type, 0.9));
     return blob ?? file;
   } catch {
     return file;

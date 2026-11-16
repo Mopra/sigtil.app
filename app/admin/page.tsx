@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
-import { eq } from 'drizzle-orm';
 import { db, siteMembers, sites, usage, users } from '@/lib/db';
-import { USD_DKK, monthOf } from '@/lib/budget';
+import { USD_DKK } from '@/lib/budget';
 import { getUser } from '@/lib/auth';
 import { addMember, createSite, createUser, setBudget } from './actions';
 
@@ -13,9 +12,10 @@ export default async function AdminPage() {
     db.select().from(sites),
     db.select().from(users),
     db.select().from(siteMembers),
-    db.select().from(usage).where(eq(usage.month, monthOf(new Date()))),
+    db.select().from(usage),
   ]);
-  const spentDkk = (siteId: string) => (spend.find(u => u.siteId === siteId)?.costUsd ?? 0) * USD_DKK;
+  const spentDkk = (siteId: string) =>
+    spend.filter(u => u.siteId === siteId).reduce((sum, u) => sum + u.costUsd, 0) * USD_DKK;
 
   const input = 'w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[15px] outline-none transition focus:border-accent/50 focus:ring-4 focus:ring-accent-soft';
   const label = 'block text-[13px] font-medium text-ink-soft mt-4 mb-1.5';
@@ -122,14 +122,14 @@ export default async function AdminPage() {
                 </span>
                 <form action={setBudget} className="mt-2 flex items-center gap-2 text-ink-soft">
                   <input type="hidden" name="siteId" value={s.id} />
-                  <span>AI this month: {spentDkk(s.id).toFixed(2)} kr. of</span>
+                  <span>AI spend: {spentDkk(s.id).toFixed(2)} kr. of</span>
                   <input
-                    name="monthlyBudgetDkk"
+                    name="budgetDkk"
                     type="number"
                     min={0}
                     step={1}
-                    defaultValue={s.monthlyBudgetDkk}
-                    aria-label="Monthly AI budget in kroner"
+                    defaultValue={s.budgetDkk}
+                    aria-label="AI budget in kroner"
                     className="w-20 rounded-lg border border-line bg-surface px-2 py-1 text-right outline-none focus:border-accent/50"
                   />
                   <span>kr.</span>

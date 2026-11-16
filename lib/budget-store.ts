@@ -1,17 +1,17 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db, usage, type Site } from './db';
 import { budgetFrom, monthOf, type Budget } from './budget';
 
-/** This month's AI spend and budget for a site. */
-export async function budgetOf(site: Pick<Site, 'id' | 'monthlyBudgetDkk'>, now = new Date()): Promise<Budget> {
+/** A site's AI spend so far and its budget. */
+export async function budgetOf(site: Pick<Site, 'id' | 'budgetDkk'>): Promise<Budget> {
   const [row] = await db
-    .select({ costUsd: usage.costUsd })
+    .select({ costUsd: sql<number>`coalesce(sum(${usage.costUsd}), 0)`.mapWith(Number) })
     .from(usage)
-    .where(and(eq(usage.siteId, site.id), eq(usage.month, monthOf(now))));
-  return budgetFrom(row?.costUsd ?? 0, site.monthlyBudgetDkk, now);
+    .where(eq(usage.siteId, site.id));
+  return budgetFrom(row?.costUsd ?? 0, site.budgetDkk);
 }
 
-/** Add what a chat turn cost to the site's spend this month. */
+/** Add what a chat turn cost to the site's spend. Kept per month, so admin can see when it was spent. */
 export async function addSpend(siteId: string, costUsd: number, now = new Date()) {
   if (!(costUsd > 0)) return;
   await db

@@ -96,7 +96,7 @@ export async function POST(req: Request) {
   if (message?.role !== 'user' || !Array.isArray(message.parts) || typeof message.id !== 'string') {
     return new Response('Bad request', { status: 400 });
   }
-  // The month's budget is spent. A repair still runs: it mends a change the
+  // The budget is spent. A repair still runs: it mends a change the
   // editor already paid for, and costs far less than leaving the site broken.
   if (!repair && isUsedUp(await budgetOf(site))) return new Response(BUDGET_USED, { status: 402 });
 

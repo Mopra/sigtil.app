@@ -30,9 +30,9 @@ export async function createSite(formData: FormData) {
 
 export async function setBudget(formData: FormData) {
   await requireAdmin();
-  const kroner = Math.round(Number(formData.get('monthlyBudgetDkk')));
+  const kroner = Math.round(Number(formData.get('budgetDkk')));
   if (!Number.isFinite(kroner) || kroner < 0 || kroner > 100_000) return;
-  await db.update(sites).set({ monthlyBudgetDkk: kroner }).where(eq(sites.id, String(formData.get('siteId'))));
+  await db.update(sites).set({ budgetDkk: kroner }).where(eq(sites.id, String(formData.get('siteId'))));
   revalidatePath('/admin');
 }
 

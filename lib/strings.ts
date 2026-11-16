@@ -36,17 +36,17 @@ export const t = {
   chatRestartHint: 'Ryd samtalen. Dine ændringer på siden bliver ikke rørt.',
   chatFailed: 'Det lykkedes ikke, og siden er uændret. Prøv igen.',
   chatBudgetUsed:
-    'Månedens AI-budget er brugt, så jeg kan ikke lave flere ændringer i denne måned. Du kan stadig rette tekster og skifte billeder direkte på siden.',
+    'AI-budgettet er brugt, så jeg kan ikke lave flere ændringer lige nu. Du kan stadig rette tekster og skifte billeder direkte på siden. Skriv til den der administrerer siden for at få mere.',
   chatUnavailable:
     'AI-hjælperen er ikke tilgængelig lige nu, og siden er uændret. Du kan stadig rette tekster og skifte billeder direkte på siden. Skriv til den der administrerer siden, hvis det fortsætter.',
 
   // Budget
-  budgetLabel: 'AI-forbrug denne måned',
+  budgetLabel: 'AI-forbrug',
   budgetOf: (limit: string) => `af ${limit} kr.`,
-  budgetTitle: (resets: string) => `Det chatten har kostet i denne måned. Starter forfra den ${resets}.`,
+  budgetTitle: 'Det chatten har kostet indtil nu, ud af det beløb der er sat af til siden.',
   budgetNear: 'Budgettet er snart brugt. Tekster og billeder kan du rette direkte på siden, og det koster ikke noget.',
-  budgetUsedUp: (resets: string) =>
-    `Budgettet er brugt. Chatten virker igen den ${resets}. Tekster og billeder kan du stadig rette direkte på siden.`,
+  budgetUsedUp:
+    'Budgettet er brugt. Skriv til den der administrerer siden for at få mere. Tekster og billeder kan du stadig rette direkte på siden.',
   send: 'Send',
   attach: 'Vedhæft billede, video eller PDF',
   dropHere: 'Slip filen her',

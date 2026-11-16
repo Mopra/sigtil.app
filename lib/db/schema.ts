@@ -29,8 +29,9 @@ export const sites = pgTable('sites', {
     .default(['app/', 'components/', 'content/', 'lib/', 'public/', 'messages/', 'locales/', 'data/']),
   // Free-text notes injected into the system prompt, e.g. "menu lives in lib/menu.ts"
   siteNotes: text('site_notes').notNull().default(''),
-  // Kroner the AI may cost this site in a month; the chat waits for the next month once it is spent
-  monthlyBudgetDkk: integer('monthly_budget_dkk').notNull().default(70),
+  // Kroner the AI may cost this site in all. It does not start over: once
+  // spent, the chat waits until this is raised in admin
+  budgetDkk: integer('budget_dkk').notNull().default(70),
   active: boolean('active').notNull().default(true),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

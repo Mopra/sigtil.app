@@ -1,11 +1,10 @@
 import { put } from '@vercel/blob';
-import sharp from 'sharp';
 import { getUser, workspaceForUser } from '@/lib/auth';
 import { writeFile } from '@/lib/github';
+import { IMAGE_TYPES, saveImage, slugify } from '@/lib/images';
 
 export const maxDuration = 120;
 
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
 const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const DOC_TYPES = ['application/pdf'];
 
@@ -13,17 +12,6 @@ const DOC_TYPES = ['application/pdf'];
 // history forever. Cap them well below GitHub's Contents API ceiling: a menu
 // card or price list is comfortably under this, a scanned brochure is not.
 const MAX_DOC_BYTES = 10 * 1024 * 1024;
-
-function slugify(name: string) {
-  return name
-    .toLowerCase()
-    .replace(/\.[^.]+$/, '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60) || 'fil';
-}
 
 export async function POST(req: Request) {
   const user = await getUser();
@@ -41,15 +29,9 @@ export async function POST(req: Request) {
   const slug = slugify(file.name);
 
   if (IMAGE_TYPES.includes(file.type)) {
-    // Images: optimize and commit into the repo so they deploy with the site.
-    const optimized = await sharp(Buffer.from(await file.arrayBuffer()))
-      .rotate() // respect EXIF orientation
-      .resize({ width: 2000, height: 2000, fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 82 })
-      .toBuffer();
-    const path = `public/uploads/${stamp}-${slug}.webp`;
-    await writeFile(site, path, optimized, `sigtil: Tilføjede billedet ${slug}`);
-    return Response.json({ kind: 'image', ref: `/uploads/${stamp}-${slug}.webp` });
+    // Images: optimized and committed into the repo so they deploy with the site.
+    const ref = await saveImage(site, file, slug => `sigtil: Tilføjede billedet ${slug}`);
+    return Response.json({ kind: 'image', ref });
   }
 
   if (DOC_TYPES.includes(file.type)) {

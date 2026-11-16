@@ -170,7 +170,8 @@ export class FakeGitHub {
       return { status: 201, body: { sha: this.commit(body.tree, body.parents, body.message, body.author) } };
     }
     if (method === 'GET' && (m = path.match(/^\/git\/trees\/([0-9a-f]+)$/))) {
-      const tree = this.trees.get(m[1]);
+      // Like GitHub, takes a commit sha too and lists that commit's tree.
+      const tree = this.trees.get(this.commits.get(m[1])?.tree ?? m[1]);
       if (!tree) throw new HttpError(404, 'Not Found');
       return {
         body: {
@@ -179,6 +180,11 @@ export class FakeGitHub {
           tree: [...tree].map(([p, e]) => ({ path: p, ...e, size: this.blobs.get(e.sha)?.length ?? 0 })),
         },
       };
+    }
+    if (method === 'GET' && (m = path.match(/^\/git\/blobs\/([^/?]+)$/))) {
+      const bytes = this.blobs.get(m[1]);
+      if (!bytes) throw new HttpError(404, 'Not Found');
+      return { body: { content: bytes.toString('base64'), encoding: 'base64' } };
     }
     if (method === 'POST' && path === '/git/trees') {
       const files = new Map(body.base_tree ? this.trees.get(body.base_tree)! : []);

@@ -64,10 +64,12 @@ export const t = {
   buildUndone: 'Ændringen kunne ikke vises på siden, så jeg har fortrudt den. Siden er som før. Prøv gerne at sige det på en anden måde.',
 
   // Editing text directly in the preview
-  inlineEdit: 'Ret tekst',
-  inlineEditTitle: 'Klik på en tekst i siden for at rette den',
-  inlineEditHint: 'Klik på en tekst for at rette den. Enter gemmer, Esc fortryder.',
-  inlineEditFailed: 'Teksten kunne ikke gemmes. Prøv igen, eller skriv ændringen i chatten.',
+  inlineEdit: 'Ret på siden',
+  inlineEditTitle: 'Ret tekster og skift billeder direkte på siden',
+  inlineEditHint: 'Klik på en tekst for at rette den. Peg på et billede for at skifte det.',
+  inlineEditFailed: 'Ændringen kunne ikke gemmes. Prøv igen, eller skriv den i chatten.',
+  inlineImageHandOff: (ref: string, alt: string) =>
+    `Jeg har uploadet et billede (${ref}). Skift billedet${alt ? ` “${alt}”` : ''} her på siden ud med det.`,
   inlineEditHandOff: (from: string, to: string) => `Ret teksten “${from}” til “${to}” her på siden.`,
 
   // Pages

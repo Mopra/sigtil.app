@@ -54,7 +54,9 @@ export default function Editor({
   const [view, setView] = useState<'chat' | 'preview'>('chat');
   const [frameWidth, setFrameWidth] = useState<FrameWidth>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const [editText, setEditText] = useState(false);
+  // On from the start: changing a text or a picture in place costs nothing and
+  // is instant, so it is the first thing an editor should meet.
+  const [editText, setEditText] = useState(true);
   // A newer build that waits to be shown until the editor is done with a text.
   const heldUrl = useRef<string | null>(null);
   const inlineBusy = useRef(false);
@@ -166,6 +168,10 @@ export default function Editor({
     onSaved: onEdited,
     onHandOff: (from, to) => {
       setPrefill({ text: t.inlineEditHandOff(from, to), send: true, id: Date.now() });
+      setView('chat');
+    },
+    onImageHandOff: (ref, alt) => {
+      setPrefill({ text: t.inlineImageHandOff(ref, alt), send: true, id: Date.now() });
       setView('chat');
     },
   });

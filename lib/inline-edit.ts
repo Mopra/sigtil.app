@@ -88,6 +88,61 @@ export async function replaceText(site: Site, oldText: string, newText: string):
   return saved ? { status: 'saved' } : { status: 'unclear', matches: 1 };
 }
 
+// A picture's path counts when it stands alone: in quotes, in a markdown
+// link, or as a value on its own. That keeps "/a/b.jpg" from matching inside
+// "/x/a/b.jpg" or "/a/b.jpg.bak".
+const PATH_BEFORE = new Set(['"', "'", '`', '(', '=', ' ', '\t', '\n', '']);
+const PATH_AFTER = new Set(['"', "'", '`', ')', '?', '#', ' ', '\t', '\n', '\r', '']);
+
+/** `content` with every standalone `oldPath` swapped for `newPath`, and how many there were. */
+export function swapPath(content: string, oldPath: string, newPath: string): { content: string; count: number } {
+  let out = '';
+  let from = 0;
+  let count = 0;
+  for (let i = content.indexOf(oldPath); i !== -1; i = content.indexOf(oldPath, i + oldPath.length)) {
+    if (!PATH_BEFORE.has(at(content, i - 1)) || !PATH_AFTER.has(at(content, i + oldPath.length))) continue;
+    out += content.slice(from, i) + newPath;
+    from = i + oldPath.length;
+    count++;
+  }
+  return { content: out + content.slice(from), count };
+}
+
+/** A picture path as the site's own files would name it; anything else is left for the AI. */
+export function isSitePath(src: string) {
+  return /^\/[\w\-./%@+~]{3,300}$/.test(src) && !src.startsWith('/_next/') && !src.includes('..');
+}
+
+/**
+ * Show `newPath` everywhere the site shows the picture at `oldPath`: both
+ * language versions, and every page that uses the same picture. When the
+ * path is not written anywhere in the site's content (a picture the code
+ * imports, say), nothing changes and the AI has to place it.
+ */
+export async function replaceImage(
+  site: Site,
+  oldPath: string,
+  newPath: string,
+  message: string,
+): Promise<TextEditResult> {
+  const files = (await readTextFiles(site)).filter(f => swapPath(f.content, oldPath, newPath).count > 0);
+  let saved = 0;
+  for (const f of files) {
+    // Swapped in the file as it is when writing, so the write cannot undo a newer edit.
+    const done = await updateFile(
+      site,
+      f.path,
+      content => {
+        const next = swapPath(content, oldPath, newPath);
+        return next.count > 0 ? next.content : null;
+      },
+      message,
+    );
+    if (done) saved++;
+  }
+  return saved > 0 ? { status: 'saved' } : { status: 'unclear', matches: 0 };
+}
+
 function short(s: string) {
   return s.length > 60 ? `${s.slice(0, 57)}…` : s;
 }

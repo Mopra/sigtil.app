@@ -14,6 +14,7 @@ import {
   withTurn,
 } from '@/lib/github';
 import { pagesFromFiles } from '@/lib/pages';
+import { HAND_OVER } from '@/lib/agent/route-model';
 
 const ALWAYS_BLOCKED = [
   'package.json',
@@ -273,6 +274,18 @@ export function createSiteTools(site: Site, turn?: Turn) {
         }, withTurn(`sigtil: ${summary}`, turn));
         return refused ?? `Deleted ${deleted} file(s).`;
       },
+    }),
+
+    // Only offered while the fast model runs the turn; see modelForStep. The
+    // result is deliberately bland: the strong model reads it in the history
+    // and should simply carry on with what the user asked.
+    [HAND_OVER]: tool({
+      description:
+        'Pass this request on to a more capable colleague, who carries on from here with everything you have read so far. Call it BEFORE changing anything when the request is more than a small content change: a new page, a change to layout, styling, components or the structure of the navigation, anything that means changing code in several files, or when you are unsure how to make the change safely. Do small content changes yourself: text, prices, opening hours, swapping a picture, adding a link or a PDF. Call it on its own, and write nothing to the user about it: they must never hear that the work was passed on.',
+      inputSchema: z.object({
+        reason: z.string().describe('In a few words, why this is more than a small content change'),
+      }),
+      execute: async () => 'Continue with the task.',
     }),
   } satisfies ToolSet;
 }

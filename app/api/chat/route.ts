@@ -11,6 +11,7 @@ import {
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { getUser, workspaceForUser } from '@/lib/auth';
 import { createSiteTools } from '@/lib/agent/tools';
+import { HAND_OVER, modelForStep } from '@/lib/agent/route-model';
 import { syncWorkBranch, type Turn } from '@/lib/github';
 import { repairPrompt, systemPrompt } from '@/lib/agent/system';
 import { buildLog } from '@/lib/vercel';
@@ -21,17 +22,35 @@ export const maxDuration = 300;
 
 const openrouter = createOpenRouter();
 
-const model = openrouter(process.env.SIGTIL_MODEL ?? 'anthropic/claude-sonnet-5', {
-  // The agent loop re-sends a growing but byte-stable prefix (system prompt,
-  // tool schemas, history, tool results) on every step, so almost all input
-  // tokens are repeats. 1h TTL rather than the 5m default because editors chat
-  // across minutes and would otherwise miss the cache between turns.
-  cache_control: { type: 'ephemeral', ttl: '1h' },
-  // Sonnet 5 defaults to `high`; content edits don't need that depth, and
-  // output tokens cost 5x input.
-  reasoning: { effort: 'medium' },
-  usage: { include: true },
-});
+// The agent loop re-sends a growing but byte-stable prefix (system prompt,
+// tool schemas, history, tool results) on every step, so almost all input
+// tokens are repeats. 1h TTL rather than the 5m default because editors chat
+// across minutes and would otherwise miss the cache between turns.
+const shared = { cache_control: { type: 'ephemeral', ttl: '1h' }, usage: { include: true } } as const;
+
+// Two models, chosen step by step in modelForStep. The fast one costs about a
+// twentieth of the strong one and does the everyday content changes.
+const models = {
+  fast: openrouter(process.env.SIGTIL_MODEL_FAST ?? 'anthropic/claude-haiku-5.5', {
+    ...shared,
+    // No thinking: a turn can change model halfway, and thinking written by
+    // one model must not be replayed to the other.
+    reasoning: { effort: 'none' },
+  }),
+  strong: openrouter(process.env.SIGTIL_MODEL ?? 'anthropic/claude-sonnet-5', {
+    ...shared,
+    // Sonnet 5 defaults to `high`; content edits don't need that depth, and
+    // output tokens cost 5x input.
+    reasoning: { effort: 'medium' },
+  }),
+};
+
+type OpenRouterUsage = {
+  promptTokens?: number;
+  promptTokensDetails?: { cachedTokens?: number };
+  completionTokens?: number;
+  cost?: number;
+};
 
 /**
  * Tell the agent which page the editor had open when they wrote, so "denne
@@ -107,23 +126,43 @@ export async function POST(req: Request) {
   // Every edit must start from the latest version of the site, never an older one.
   await syncWorkBranch(site);
 
+  // Once the strong model has the turn there is nobody left to hand over to.
+  const withoutHandOver = (Object.keys(tools) as Array<keyof typeof tools>).filter(name => name !== HAND_OVER);
+
+  // Which model ran each step. The steps themselves all name the model the
+  // turn started on, also after a hand-over.
+  const ran: Array<'fast' | 'strong'> = [];
+
   const result = streamText({
-    model,
+    model: models[modelForStep([], !!repair)],
     system: systemPrompt(site),
     messages: await convertToModelMessages(
       sent.map((m, i) => withPageNote(withRepair(m, i === last ? log : null))),
     ),
     tools,
     stopWhen: isStepCount(15),
-    onFinish({ providerMetadata }) {
-      const usage = providerMetadata?.openrouter?.usage as
-        | { promptTokens?: number; promptTokensDetails?: { cachedTokens?: number }; completionTokens?: number; cost?: number }
-        | undefined;
-      if (!usage) return;
-      const cached = usage.promptTokensDetails?.cachedTokens ?? 0;
-      const prompt = usage.promptTokens ?? 0;
+    prepareStep({ steps }) {
+      const which = modelForStep(steps, !!repair);
+      ran.push(which);
+      return which === 'strong' ? { model: models.strong, activeTools: withoutHandOver } : { model: models.fast };
+    },
+    onFinish({ steps }) {
+      // Each step is its own request with its own bill, so add them up.
+      let prompt = 0;
+      let cached = 0;
+      let completion = 0;
+      let cost = 0;
+      for (const step of steps) {
+        const usage = step.providerMetadata?.openrouter?.usage as OpenRouterUsage | undefined;
+        prompt += usage?.promptTokens ?? 0;
+        cached += usage?.promptTokensDetails?.cachedTokens ?? 0;
+        completion += usage?.completionTokens ?? 0;
+        cost += usage?.cost ?? 0;
+      }
+      // In the order they ran: "fast,strong" for a turn handed over.
+      const which = [...new Set(ran)].join(',');
       console.log(
-        `[chat] site=${site.id} prompt=${prompt} cached=${cached} (${prompt ? Math.round((cached / prompt) * 100) : 0}%) completion=${usage.completionTokens ?? 0} cost=$${(usage.cost ?? 0).toFixed(4)}`,
+        `[chat] site=${site.id} models=${which} steps=${steps.length} prompt=${prompt} cached=${cached} (${prompt ? Math.round((cached / prompt) * 100) : 0}%) completion=${completion} cost=$${cost.toFixed(4)}`,
       );
     },
   });

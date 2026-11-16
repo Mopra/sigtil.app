@@ -25,6 +25,55 @@ describe('forModel', () => {
   });
 });
 
+describe('forModel on earlier answers', () => {
+  const tool = (type: string, input: unknown, output: string, state = 'output-available') => ({
+    type,
+    toolCallId: type,
+    state,
+    input,
+    output,
+  });
+  const history = [
+    { id: 'u0', role: 'user', parts: [{ type: 'text', text: 'ret prisen' }] },
+    {
+      id: 'a0',
+      role: 'assistant',
+      parts: [
+        { type: 'reasoning', text: 'hm' },
+        tool('tool-readFile', { path: 'content/menu.mdx' }, 'a long file'),
+        tool('tool-editFile', { path: 'content/menu.mdx' }, 'Saved. content/menu.mdx updated.'),
+        tool('tool-editFile', { path: 'content/en/menu.mdx' }, 'The text to replace was not found.'),
+        tool('tool-createFile', { path: 'content/ny.mdx' }, 'Created content/ny.mdx.'),
+        { type: 'text', text: 'Prisen er rettet.' },
+      ],
+    },
+    { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'tak' }] },
+  ] as unknown as UIMessage[];
+
+  it('keeps what was said and drops what was read and done', () => {
+    const sent = forModel(history);
+    expect(sent[1].parts).toEqual([{ type: 'text', text: 'Prisen er rettet.' }]);
+  });
+
+  it('names the files the answer changed in the next user message', () => {
+    const sent = forModel(history);
+    expect(sent[2].parts).toEqual([
+      { type: 'text', text: '[Files changed in your previous answer: content/menu.mdx, content/ny.mdx]' },
+      { type: 'text', text: 'tak' },
+    ]);
+    expect(sent[0].parts).toEqual(history[0].parts);
+  });
+
+  it('gives the same earlier messages when the conversation grows', () => {
+    const longer = [
+      ...history,
+      { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'Selv tak.' }] },
+      { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'en ting mere' }] },
+    ] as unknown as UIMessage[];
+    expect(forModel(longer).slice(0, 3)).toEqual(forModel(history));
+  });
+});
+
 describe('forStorage', () => {
   it('keeps the newest 40 turns', () => {
     const kept = forStorage(turns(45));

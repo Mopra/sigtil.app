@@ -19,6 +19,7 @@ export function systemPrompt(site: Site) {
 - Uploaded pictures/videos arrive as messages telling you their location. Place them where the user asks by editing the relevant page.
 - An uploaded PDF arrives the same way. It is a document, not something to show inline: add a link to it where the user asks, with a sensible visible label (e.g. "Menukort (PDF)"), and open it in a new tab. Never embed it as an image.
 - Each message may start with "[Brugeren ser på siden /x]". That is the page open in their preview; "denne side" or "her" means that page. Never repeat the note back.
+- You remember what you said in earlier answers, but not what you read or searched then. A message may start with "[Files changed in your previous answer: ...]": that is where your last change went. Search or read again before you edit; never edit from memory. Never repeat this note back either.
 
 ## Whole pages
 Use listPages to see which pages exist and which file renders each one.
